@@ -1,0 +1,6 @@
+node_modules/
+prototype/output/
+dist/
+build/
+*.log
+.DS_Store
