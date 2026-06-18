@@ -4,6 +4,7 @@ import { TanaClient, type Workspace } from '../tana/client';
 import {
   CATALOG_BY_KEY,
   DEFAULT_TAG_NAME,
+  effectiveFieldName,
   type TanaDataType,
 } from '../tana/constants';
 import { ensureSchema } from '../tana/schema';
@@ -132,8 +133,9 @@ export class SchemaPanel extends React.Component<unknown, State> {
       return;
     }
 
-    // Persist the current names/tag before creating, then trim blank names back to
-    // their catalog default so we never send an empty field name to Tana.
+    // Persist the current names/tag before creating. Blank names are kept blank
+    // (resolved to the catalog default at sync time); only the tag name and real
+    // renames are normalized here.
     const config = normalizeConfig(this.state.config);
     this.persistConfig(config);
 
@@ -206,7 +208,7 @@ export class SchemaPanel extends React.Component<unknown, State> {
                   <input
                     type="checkbox"
                     checked={field.enabled}
-                    aria-label={`Sync ${field.name}`}
+                    aria-label={`Sync ${effectiveFieldName(field.key, field.name)}`}
                     onChange={(event) =>
                       this.updateField(field.key, {
                         enabled: event.target.checked,
@@ -249,13 +251,13 @@ export class SchemaPanel extends React.Component<unknown, State> {
   }
 }
 
-/** Replace blank field names with their catalog default. */
+/** Normalize the tag name and trim field names; blank names stay blank. */
 function normalizeConfig(config: SchemaConfig): SchemaConfig {
   return {
     tagName: config.tagName.trim() || DEFAULT_TAG_NAME,
     fields: config.fields.map((field) => ({
       ...field,
-      name: field.name.trim() || CATALOG_BY_KEY[field.key].defaultName,
+      name: field.name.trim(),
     })),
   };
 }

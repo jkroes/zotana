@@ -182,6 +182,14 @@ export const CATALOG_BY_KEY = Object.fromEntries(
 
 export const FIELD_KEYS: FieldKey[] = CATALOG.map((entry) => entry.key);
 
+/**
+ * The name a field is resolved/created under in Tana: the user's rename, or the
+ * catalog default when the configured name is blank (the prefs placeholder).
+ */
+export function effectiveFieldName(key: FieldKey, name: string): string {
+  return name.trim() || CATALOG_BY_KEY[key].defaultName;
+}
+
 /** The back-link field is immutable (the Zotero item key never changes). */
 export const ITEM_FIELD_KEY: FieldKey = 'item';
 

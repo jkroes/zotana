@@ -15,6 +15,7 @@ import {
   CATALOG_BY_KEY,
   ENTITY_TAG_NAMES,
   QUOTE_TAG_NAME,
+  effectiveFieldName,
   type CatalogEntry,
   type EntityTag,
   type FieldKey,
@@ -104,10 +105,12 @@ export async function ensureSchema(
     if (!field.enabled) continue;
 
     const entry = CATALOG_BY_KEY[field.key];
-    let id = existingFields.get(field.name);
+    // A blank name means "use the catalog default" (the prefs placeholder).
+    const name = effectiveFieldName(field.key, field.name);
+    let id = existingFields.get(name);
     if (!id) {
       const created = await client.addField(tagId, {
-        name: field.name,
+        name,
         dataType: entry.dataType,
         isMultiValue: entry.multiValue,
         sourceTagId: entry.sourceTag
@@ -116,10 +119,10 @@ export async function ensureSchema(
         options: optionsForField(entry, optionSeeds[field.key]),
       });
       id = created.fieldId;
-      existingFields.set(field.name, id);
+      existingFields.set(name, id);
       if (entry.transientSeed) createdTransientSeed = true;
     }
-    fields[field.key] = { name: field.name, id };
+    fields[field.key] = { name, id };
   }
 
   // Entity options fields were seeded with a placeholder to satisfy the API;

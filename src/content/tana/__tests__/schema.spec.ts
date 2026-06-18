@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import type { SchemaConfig } from '../../prefs/schema-config';
 import { type TanaClient } from '../client';
 import {
   ensureSchema,
   parseSeedOptionIds,
   parseTagSchemaFields,
 } from '../schema';
-import type { SchemaConfig } from '../../prefs/schema-config';
 
 const SCHEMA_MARKDOWN = `# Tag definition: zotero (id:tag-zotero)
 
@@ -71,7 +71,9 @@ describe('ensureSchema — bootstrap (nothing exists)', () => {
     // the entity field's seed option to trash.
     client.getTagSchema
       .mockResolvedValueOnce('')
-      .mockResolvedValue('- **Creators** (id:field-Creators):: Options\n  - __zotana_seed__ (id:seed-1)');
+      .mockResolvedValue(
+        '- **Creators** (id:field-Creators):: Options\n  - __zotana_seed__ (id:seed-1)',
+      );
 
     const schema = await ensureSchema(client as unknown as TanaClient, config, {
       workspaceId: 'ws1',
@@ -84,15 +86,21 @@ describe('ensureSchema — bootstrap (nothing exists)', () => {
     expect(schema.quoteTagId).toBe('tag-quote');
 
     // enabled fields resolved; disabled field absent
-    expect(schema.fields.creators).toEqual({ name: 'Creators', id: 'field-Creators' });
-    expect(schema.fields.abstract).toEqual({ name: 'Abstract', id: 'field-Abstract' });
+    expect(schema.fields.creators).toEqual({
+      name: 'Creators',
+      id: 'field-Creators',
+    });
+    expect(schema.fields.abstract).toEqual({
+      name: 'Abstract',
+      id: 'field-Abstract',
+    });
     expect(schema.fields.shortTitle).toBeUndefined();
 
     const addCalls = client.addField.mock.calls;
     const byName = (name: string) =>
-      addCalls.find((call: unknown[]) => (call[1] as { name: string }).name === name)?.[1] as
-        | Record<string, unknown>
-        | undefined;
+      addCalls.find(
+        (call: unknown[]) => (call[1] as { name: string }).name === name,
+      )?.[1] as Record<string, unknown> | undefined;
 
     // disabled field never created
     expect(byName('Short Title')).toBeUndefined();
@@ -113,6 +121,32 @@ describe('ensureSchema — bootstrap (nothing exists)', () => {
 
     // the entity seed option was trashed
     expect(client.trash).toHaveBeenCalledWith('seed-1');
+  });
+});
+
+describe('ensureSchema — blank names resolve to the catalog default', () => {
+  it('creates a field under its catalog default name when the config name is blank', async () => {
+    const client = createClientMock();
+    const blankConfig: SchemaConfig = {
+      tagName: 'zotero',
+      fields: [{ key: 'abstract', name: '', enabled: true }],
+    };
+
+    const schema = await ensureSchema(
+      client as unknown as TanaClient,
+      blankConfig,
+      { workspaceId: 'ws1' },
+    );
+
+    // resolved + created under the catalog default, not the empty string
+    expect(schema.fields.abstract).toEqual({
+      name: 'Abstract',
+      id: 'field-Abstract',
+    });
+    expect(client.addField).toHaveBeenCalledWith(
+      'tag-zotero',
+      expect.objectContaining({ name: 'Abstract' }),
+    );
   });
 });
 
@@ -140,6 +174,9 @@ describe('ensureSchema — resolve (everything exists)', () => {
     expect(client.createTag).not.toHaveBeenCalled();
     expect(client.addField).not.toHaveBeenCalled();
     expect(client.trash).not.toHaveBeenCalled();
-    expect(schema.fields.itemType).toEqual({ name: 'Item Type', id: 'field-ItemType' });
+    expect(schema.fields.itemType).toEqual({
+      name: 'Item Type',
+      id: 'field-ItemType',
+    });
   });
 });

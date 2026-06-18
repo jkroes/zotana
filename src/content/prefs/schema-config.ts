@@ -28,13 +28,16 @@ export type SchemaConfig = {
   fields: FieldConfig[];
 };
 
-/** A fresh config: default tag name + every catalog field enabled at its default name. */
+/**
+ * A fresh config: default tag name + every catalog field enabled, with no name
+ * override (each field shows its catalog default as a placeholder).
+ */
 export function defaultSchemaConfig(): SchemaConfig {
   return {
     tagName: DEFAULT_TAG_NAME,
     fields: CATALOG.map((entry) => ({
       key: entry.key,
-      name: entry.defaultName,
+      name: '',
       enabled: true,
     })),
   };
@@ -42,9 +45,10 @@ export function defaultSchemaConfig(): SchemaConfig {
 
 /**
  * Reconcile a (possibly stale or partial) stored config against the current
- * catalog: keep the user's name/enabled for known keys, fill in any fields the
+ * catalog: keep the user's rename/enabled for known keys, fill in any fields the
  * catalog has gained, drop any keys the catalog no longer has, and always return
- * fields in catalog order. A blank name falls back to the catalog default.
+ * fields in catalog order. A blank name (or one matching the catalog default) is
+ * stored as `''` and resolved to the default at sync time.
  */
 export function mergeSchemaConfig(raw: unknown): SchemaConfig {
   const defaults = defaultSchemaConfig();
@@ -69,10 +73,9 @@ export function mergeSchemaConfig(raw: unknown): SchemaConfig {
     if (!isObject(entry)) return fallback;
     return {
       key: fallback.key,
-      name:
-        typeof entry.name === 'string' && entry.name.trim()
-          ? entry.name.trim()
-          : fallback.name,
+      // Blank stays blank (renders as the grey placeholder, resolved to the
+      // catalog default at sync time); real input is trimmed and kept verbatim.
+      name: typeof entry.name === 'string' ? entry.name.trim() : '',
       enabled:
         typeof entry.enabled === 'boolean' ? entry.enabled : fallback.enabled,
     };

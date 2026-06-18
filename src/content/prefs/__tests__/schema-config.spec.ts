@@ -4,14 +4,12 @@ import { CATALOG, DEFAULT_TAG_NAME } from '../../tana/constants';
 import { defaultSchemaConfig, mergeSchemaConfig } from '../schema-config';
 
 describe('defaultSchemaConfig', () => {
-  it('defaults the tag name and enables every catalog field at its default name', () => {
+  it('defaults the tag name and enables every catalog field with no name override', () => {
     const config = defaultSchemaConfig();
     expect(config.tagName).toBe(DEFAULT_TAG_NAME);
     expect(config.fields).toHaveLength(CATALOG.length);
     expect(config.fields.every((field) => field.enabled)).toBe(true);
-    expect(config.fields.map((field) => field.name)).toEqual(
-      CATALOG.map((entry) => entry.defaultName),
-    );
+    expect(config.fields.every((field) => field.name === '')).toBe(true);
   });
 });
 
@@ -51,12 +49,13 @@ describe('mergeSchemaConfig', () => {
     expect(config.fields.map((f) => f.key)).toEqual(CATALOG.map((e) => e.key));
   });
 
-  it('drops unknown keys and blank names fall back to the catalog default', () => {
+  it('drops unknown keys; blank names are stored empty, real input kept verbatim', () => {
     const config = mergeSchemaConfig({
       tagName: '  ',
       fields: [
         { key: 'not-a-real-field', name: 'X', enabled: true },
         { key: 'creators', name: '   ', enabled: true },
+        { key: 'abstract', name: 'Abstract', enabled: true }, // matches default
       ],
     });
 
@@ -65,8 +64,11 @@ describe('mergeSchemaConfig', () => {
     expect(config.fields).toHaveLength(CATALOG.length);
     const keys = config.fields.map((f): string => f.key);
     expect(keys).not.toContain('not-a-real-field');
-    expect(config.fields.find((f) => f.key === 'creators')?.name).toBe(
-      'Creators',
+    // blank → '' (resolved to the default at sync time)
+    expect(config.fields.find((f) => f.key === 'creators')?.name).toBe('');
+    // real input is kept verbatim, even when it matches the catalog default
+    expect(config.fields.find((f) => f.key === 'abstract')?.name).toBe(
+      'Abstract',
     );
   });
 });
