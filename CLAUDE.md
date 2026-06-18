@@ -147,9 +147,11 @@ collection / sync-on-modify services are inherited from Notero.
 - **Rich-text note syncing** — deferred. `sync-job` skips note items; supporting
   them needs an HTML→Tana-Paste converter (Notero's `html-to-notion` is the
   reference).
-- **Rebrand polish (low priority):** `CHANGELOG.md`, `.github/`, `crowdin.yml`,
-  `release-please-config.json`, `.release-please-manifest.json`, and
-  `zotero.config.example.json` still carry upstream `notero` / `dvanoni` strings.
+- **No release / publish automation.** The Notero release + Crowdin workflows and
+  the release-please config were removed; there is no auto-update server. Builds
+  are local (`pnpm build` + `pnpm create-xpi`). Add a release workflow if/when you
+  publish. (`scripts/generate-update-manifest.mts` + `xpi.updateURL` are leftover
+  from the old auto-update mechanism and currently unused.)
 - **Clean `tsc`:** `typecheck` reports errors inside `node_modules/@voidzero-dev/*`
   (vite-plus's own `.d.ts`); add `"skipLibCheck": true` to `tsconfig.json` if a
   clean run is wanted.
