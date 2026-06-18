@@ -25,6 +25,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: xpi/*.xpi
+          make_latest: 'true'
       - name: Generate update manifest
         run: vp run generate-update-manifest ${{ fromJSON(steps.publish-xpi.outputs.assets)[0].browser_download_url }}
       - name: Publish update manifest
@@ -32,3 +33,4 @@ jobs:
         with:
           tag_name: release
           files: gen/update*
+          make_latest: 'false'
