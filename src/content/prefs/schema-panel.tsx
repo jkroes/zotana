@@ -162,6 +162,14 @@ export class SchemaPanel extends React.Component<unknown, State> {
     const { config, workspaces, workspaceId, statusKind, statusMessage } =
       this.state;
 
+    // Display the field table alphabetically (by catalog name, so rows don't jump
+    // while a name is being edited). Storage/creation order is unaffected.
+    const sortedFields = config.fields.toSorted((a, b) =>
+      CATALOG_BY_KEY[a.key].defaultName.localeCompare(
+        CATALOG_BY_KEY[b.key].defaultName,
+      ),
+    );
+
     return (
       <div className="zotana-schema-panel">
         <div className="zotana-margin-block-start">
@@ -200,7 +208,7 @@ export class SchemaPanel extends React.Component<unknown, State> {
             </tr>
           </thead>
           <tbody>
-            {config.fields.map((field) => (
+            {sortedFields.map((field) => (
               <tr key={field.key}>
                 <td>
                   <input
