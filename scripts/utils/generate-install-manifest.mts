@@ -24,7 +24,6 @@ export async function generateInstallManifest() {
     applications: {
       zotero: {
         id: pkg.xpi.id,
-        update_url: pkg.xpi.updateURL,
         strict_min_version: pkg.xpi.zoteroMinVersion,
         strict_max_version: pkg.xpi.zoteroMaxVersion,
       },

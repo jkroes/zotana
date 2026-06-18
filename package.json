@@ -22,7 +22,6 @@
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "generate-fluent-types": "node scripts/generate-fluent-types.mts",
-    "generate-update-manifest": "node scripts/generate-update-manifest.mts",
     "lint": "vp lint",
     "lint:fix": "vp lint --fix",
     "prepare": "vp config",
@@ -71,7 +70,6 @@
   "xpi": {
     "id": "zotana@jkroes",
     "name": "Zotana",
-    "updateURL": "https://github.com/jkroes/zotana/releases/download/release/updates.json",
     "zoteroMinVersion": "7.0",
     "zoteroMaxVersion": "9.0.*"
   }
