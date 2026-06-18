@@ -86,28 +86,19 @@ export type CatalogEntry = {
 };
 
 /**
- * Ordered field catalog. Order drives the preferences table and field-creation
- * order; the emitted Tana Paste order is set by the reference builder.
+ * Field catalog, ordered alphabetically by `defaultName`. This order is the
+ * single source of truth: it drives the preferences table, the stored config
+ * (see `prefs/schema-config.ts`), and the field-creation order in Tana (see
+ * `tana/schema.ts`). The emitted Tana Paste order is independent — set by the
+ * reference builder. Renaming a field in preferences does NOT reshuffle it; the
+ * table sorts by `defaultName` so rows stay put while a name is being edited.
  */
 export const CATALOG: CatalogEntry[] = [
-  { key: 'item', defaultName: 'Item', dataType: 'url' },
+  { key: 'abstract', defaultName: 'Abstract', dataType: 'plain' },
+  { key: 'citationKey', defaultName: 'Citation Key', dataType: 'plain' },
   {
-    key: 'creators',
-    defaultName: 'Creators',
-    dataType: 'options',
-    multiValue: true,
-    transientSeed: true,
-  },
-  {
-    key: 'editors',
-    defaultName: 'Editors',
-    dataType: 'options',
-    multiValue: true,
-    transientSeed: true,
-  },
-  {
-    key: 'contributors',
-    defaultName: 'Contributors',
+    key: 'collections',
+    defaultName: 'Collections',
     dataType: 'options',
     multiValue: true,
     transientSeed: true,
@@ -119,40 +110,55 @@ export const CATALOG: CatalogEntry[] = [
     transientSeed: true,
   },
   {
-    key: 'publisher',
-    defaultName: 'Publisher',
+    key: 'contributors',
+    defaultName: 'Contributors',
     dataType: 'options',
     multiValue: true,
     transientSeed: true,
   },
-  { key: 'place', defaultName: 'Place', dataType: 'plain' },
+  {
+    key: 'creators',
+    defaultName: 'Creators',
+    dataType: 'options',
+    multiValue: true,
+    transientSeed: true,
+  },
   { key: 'date', defaultName: 'Date', dataType: 'date' },
-  { key: 'year', defaultName: 'Year', dataType: 'number' },
-  { key: 'volume', defaultName: 'Volume', dataType: 'plain' },
-  { key: 'issue', defaultName: 'Issue', dataType: 'plain' },
-  { key: 'pages', defaultName: 'Pages', dataType: 'plain' },
+  { key: 'dateAdded', defaultName: 'Date Added', dataType: 'date' },
+  { key: 'dateModified', defaultName: 'Date Modified', dataType: 'date' },
+  { key: 'doi', defaultName: 'DOI', dataType: 'url' },
   { key: 'edition', defaultName: 'Edition', dataType: 'plain' },
-  { key: 'series', defaultName: 'Series', dataType: 'plain' },
-  { key: 'number', defaultName: 'Number', dataType: 'plain' },
-  { key: 'typeDetail', defaultName: 'Type Detail', dataType: 'plain' },
+  {
+    key: 'editors',
+    defaultName: 'Editors',
+    dataType: 'options',
+    multiValue: true,
+    transientSeed: true,
+  },
+  { key: 'extra', defaultName: 'Extra', dataType: 'plain' },
+  { key: 'filePath', defaultName: 'File Path', dataType: 'plain' },
+  { key: 'fullCitation', defaultName: 'Full Citation', dataType: 'plain' },
+  { key: 'inTextCitation', defaultName: 'In-Text Citation', dataType: 'plain' },
+  { key: 'issue', defaultName: 'Issue', dataType: 'plain' },
+  { key: 'item', defaultName: 'Item', dataType: 'url' },
   {
     key: 'itemType',
     defaultName: 'Item Type',
     dataType: 'options',
     optionSeed: ['Document'],
   },
-  { key: 'doi', defaultName: 'DOI', dataType: 'url' },
-  { key: 'url', defaultName: 'URL', dataType: 'url' },
-  { key: 'abstract', defaultName: 'Abstract', dataType: 'plain' },
-  { key: 'fullCitation', defaultName: 'Full Citation', dataType: 'plain' },
-  { key: 'inTextCitation', defaultName: 'In-Text Citation', dataType: 'plain' },
+  { key: 'number', defaultName: 'Number', dataType: 'plain' },
+  { key: 'pages', defaultName: 'Pages', dataType: 'plain' },
+  { key: 'place', defaultName: 'Place', dataType: 'plain' },
   {
-    key: 'collections',
-    defaultName: 'Collections',
+    key: 'publisher',
+    defaultName: 'Publisher',
     dataType: 'options',
     multiValue: true,
     transientSeed: true,
   },
+  { key: 'series', defaultName: 'Series', dataType: 'plain' },
+  { key: 'shortTitle', defaultName: 'Short Title', dataType: 'plain' },
   {
     key: 'tags',
     defaultName: 'Tags',
@@ -160,12 +166,10 @@ export const CATALOG: CatalogEntry[] = [
     multiValue: true,
     transientSeed: true,
   },
-  { key: 'extra', defaultName: 'Extra', dataType: 'plain' },
-  { key: 'citationKey', defaultName: 'Citation Key', dataType: 'plain' },
-  { key: 'dateAdded', defaultName: 'Date Added', dataType: 'date' },
-  { key: 'dateModified', defaultName: 'Date Modified', dataType: 'date' },
-  { key: 'filePath', defaultName: 'File Path', dataType: 'plain' },
-  { key: 'shortTitle', defaultName: 'Short Title', dataType: 'plain' },
+  { key: 'typeDetail', defaultName: 'Type Detail', dataType: 'plain' },
+  { key: 'url', defaultName: 'URL', dataType: 'url' },
+  { key: 'volume', defaultName: 'Volume', dataType: 'plain' },
+  { key: 'year', defaultName: 'Year', dataType: 'number' },
 ];
 
 // `Object.fromEntries` widens to a string index signature, which TS won't narrow
