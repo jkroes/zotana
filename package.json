@@ -69,10 +69,6 @@
   },
   "packageManager": "pnpm@10.33.2",
   "xpi": {
-    "icons": {
-      "48": "content/style/zotana-48.png",
-      "96": "content/style/zotana-96.png"
-    },
     "id": "zotana@jkroes",
     "name": "Zotana",
     "updateURL": "https://github.com/jkroes/zotana/releases/download/release/updates.json",

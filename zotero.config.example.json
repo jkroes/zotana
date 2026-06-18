@@ -1,7 +1,7 @@
 {
   "profile": {
     // (required) Absolute path to your Zotero profile.
-    "path": "/Users/dvanoni/Library/Application Support/Zotero/Profiles/sekg0jb3.dev"
+    "path": "/Users/you/Library/Application Support/Zotero/Profiles/xxxxxxxx.default"
   },
   "zotero": {
     // (optional) Explicit path to executable for your default Zotero version.

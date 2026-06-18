@@ -18,7 +18,6 @@ export async function generateInstallManifest() {
     author: pkg.author.name,
     description: pkg.description,
     homepage_url: pkg.homepage,
-    icons: pkg.xpi.icons,
     manifest_version: 2,
     name: pkg.xpi.name,
     version,
