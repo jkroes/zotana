@@ -33,7 +33,9 @@ export default defineConfig({
       'shared-node-browser': true,
       es2022: true,
     },
-    ignorePatterns: ['build', 'gen'],
+    // `prototype/` is a standalone, pre-plugin mapping harness (untyped ESM, prints
+    // samples to the console); the type-aware plugin rules don't apply to it.
+    ignorePatterns: ['build', 'gen', 'prototype'],
     rules: {
       'import/no-default-export': 'error',
       'no-console': 'error',
@@ -51,6 +53,16 @@ export default defineConfig({
         files: ['scripts/**'],
         rules: {
           'no-console': 'off',
+        },
+      },
+      {
+        // Test files lean on loosely-typed mocks: untyped `vi.fn()`, `as unknown
+        // as Client` casts, and `any` query params. Relax those mock-only rules.
+        files: ['**/__tests__/**', '**/*.spec.ts'],
+        rules: {
+          'vitest/require-mock-type-parameters': 'off',
+          'typescript/no-explicit-any': 'off',
+          'typescript/no-unsafe-type-assertion': 'off',
         },
       },
     ],

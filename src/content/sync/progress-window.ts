@@ -57,7 +57,7 @@ export class ProgressWindow {
         (await this.l10n.formatValue('zotana-warning-referenced-fields', {
           fields: fields.join(', '),
         })) || `Referenced in Tana, not updated: ${fields.join(', ')}`;
-      new this.progressWindow.ItemProgress('', message);
+      void new this.progressWindow.ItemProgress('', message);
     }
   }
 

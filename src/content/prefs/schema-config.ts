@@ -8,11 +8,7 @@
  * `schemaConfig` preference.
  */
 
-import {
-  CATALOG,
-  DEFAULT_TAG_NAME,
-  type FieldKey,
-} from '../tana/constants';
+import { CATALOG, DEFAULT_TAG_NAME, type FieldKey } from '../tana/constants';
 import { isObject } from '../utils';
 
 import { ZotanaPref, getZotanaPref, setZotanaPref } from './zotana-pref';
@@ -59,7 +55,7 @@ export function mergeSchemaConfig(raw: unknown): SchemaConfig {
       ? raw.tagName.trim()
       : defaults.tagName;
 
-  const stored = new Map<string, unknown>();
+  const stored: Map<string, unknown> = new Map();
   if (Array.isArray(raw.fields)) {
     for (const field of raw.fields) {
       if (isObject(field) && typeof field.key === 'string') {

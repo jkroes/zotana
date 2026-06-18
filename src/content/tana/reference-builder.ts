@@ -12,8 +12,8 @@
  * destined for Tana Paste (create) or per-field upsert (update).
  */
 
-import { bucketCreators } from './entities';
 import { type FieldKey } from './constants';
+import { bucketCreators } from './entities';
 import type { ResolvedSchema } from './schema';
 import type {
   TanaField,
@@ -44,7 +44,7 @@ export type BuildReferenceParams = {
  * there's no real year (`0000`). Returned as a string for the Number field.
  */
 export function extractYear(sqlDate: string | undefined): string | null {
-  const match = String(sqlDate ?? '').match(/(\d{4})/);
+  const match = (sqlDate ?? '').match(/(\d{4})/);
   return match && match[1] && match[1] !== '0000' ? match[1] : null;
 }
 
@@ -56,7 +56,7 @@ export function extractYear(sqlDate: string | undefined): string | null {
  * the year. No real year → null.
  */
 export function normalizeDate(sqlDate: string | undefined): string | null {
-  const match = String(sqlDate ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const match = (sqlDate ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return null;
   const [, year, month, day] = match;
   if (!year || year === '0000') return null;
@@ -146,7 +146,9 @@ class ReferenceBuilder {
     this.pushScalar(
       'series',
       'plain',
-      isPodcast ? undefined : this.getField('series') || this.getField('seriesTitle'),
+      isPodcast
+        ? undefined
+        : this.getField('series') || this.getField('seriesTitle'),
     );
     this.pushScalar('number', 'plain', this.getField('number'));
     this.pushScalar('typeDetail', 'plain', this.getField('type'));
@@ -293,4 +295,3 @@ function isoDate(date: string | undefined): string | null {
   if (!date) return null;
   return date.slice(0, 10);
 }
-

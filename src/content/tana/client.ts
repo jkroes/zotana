@@ -134,7 +134,11 @@ export class TanaClient {
     try {
       const res = await this.fetchFn(`${this.baseUrl}/health`);
       if (!res.ok) return false;
-      const json = (await res.json()) as { status?: string; nodeSpaceReady?: boolean };
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const json = (await res.json()) as {
+        status?: string;
+        nodeSpaceReady?: boolean;
+      };
       return json.status === 'ok' && json.nodeSpaceReady !== false;
     } catch {
       return false;
@@ -143,7 +147,9 @@ export class TanaClient {
 
   /** Create nodes from Tana Paste under a parent. Returns the created node IDs. */
   public import(parentNodeId: string, content: string): Promise<ImportResult> {
-    return this.request('POST', `/nodes/${enc(parentNodeId)}/import`, { content });
+    return this.request('POST', `/nodes/${enc(parentNodeId)}/import`, {
+      content,
+    });
   }
 
   /**
@@ -197,7 +203,10 @@ export class TanaClient {
     tagIds: string[],
     action: 'add' | 'remove' = 'add',
   ): Promise<void> {
-    await this.request('POST', `/nodes/${enc(nodeId)}/tags`, { action, tagIds });
+    await this.request('POST', `/nodes/${enc(nodeId)}/tags`, {
+      action,
+      tagIds,
+    });
   }
 
   /** Move a node to the workspace trash. */
@@ -207,7 +216,9 @@ export class TanaClient {
 
   /** Read a node (and children to maxDepth) as markdown. */
   public readNode(nodeId: string, maxDepth = 1): Promise<ReadResult> {
-    return this.request('GET', `/nodes/${enc(nodeId)}`, undefined, { maxDepth });
+    return this.request('GET', `/nodes/${enc(nodeId)}`, undefined, {
+      maxDepth,
+    });
   }
 
   /**
@@ -245,7 +256,11 @@ export class TanaClient {
     workspaceId: string,
     options: { name: string; description?: string; extendsTagIds?: string[] },
   ): Promise<CreateTagResult> {
-    return this.request('POST', `/workspaces/${enc(workspaceId)}/tags`, options);
+    return this.request(
+      'POST',
+      `/workspaces/${enc(workspaceId)}/tags`,
+      options,
+    );
   }
 
   /** Add a typed field to a supertag. Returns the new attribute ID. */
@@ -258,6 +273,7 @@ export class TanaClient {
 
   /** Read a supertag's schema as markdown (field names + attribute IDs). */
   public async getTagSchema(tagId: string): Promise<string> {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const result = (await this.request(
       'GET',
       `/tags/${enc(tagId)}/schema`,
@@ -270,6 +286,9 @@ export class TanaClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number>,
+    // The REST API is the untyped JSON boundary; callers assert the concrete
+    // response shape. Keeping the gateway `any` avoids casts at every call site.
+    // oxlint-disable-next-line typescript/no-explicit-any
   ): Promise<any> {
     let url = `${this.baseUrl}${path}`;
     if (query) {

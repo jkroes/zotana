@@ -33,7 +33,11 @@ describe('mergeSchemaConfig', () => {
     expect(config.tagName).toBe('bibliography');
     const creators = config.fields.find((f) => f.key === 'creators');
     const abstract = config.fields.find((f) => f.key === 'abstract');
-    expect(creators).toEqual({ key: 'creators', name: 'Authors', enabled: true });
+    expect(creators).toEqual({
+      key: 'creators',
+      name: 'Authors',
+      enabled: true,
+    });
     expect(abstract?.enabled).toBe(false);
   });
 
@@ -59,8 +63,10 @@ describe('mergeSchemaConfig', () => {
     expect(config.tagName).toBe(DEFAULT_TAG_NAME); // blank → default
     // unknown key dropped → only catalog keys remain
     expect(config.fields).toHaveLength(CATALOG.length);
-    const keys = config.fields.map((f) => String(f.key));
+    const keys = config.fields.map((f): string => f.key);
     expect(keys).not.toContain('not-a-real-field');
-    expect(config.fields.find((f) => f.key === 'creators')?.name).toBe('Creators');
+    expect(config.fields.find((f) => f.key === 'creators')?.name).toBe(
+      'Creators',
+    );
   });
 });

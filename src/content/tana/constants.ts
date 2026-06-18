@@ -91,11 +91,35 @@ export type CatalogEntry = {
  */
 export const CATALOG: CatalogEntry[] = [
   { key: 'item', defaultName: 'Item', dataType: 'url' },
-  { key: 'creators', defaultName: 'Creators', dataType: 'options', multiValue: true, transientSeed: true },
-  { key: 'editors', defaultName: 'Editors', dataType: 'options', multiValue: true, transientSeed: true },
-  { key: 'contributors', defaultName: 'Contributors', dataType: 'options', multiValue: true, transientSeed: true },
+  {
+    key: 'creators',
+    defaultName: 'Creators',
+    dataType: 'options',
+    multiValue: true,
+    transientSeed: true,
+  },
+  {
+    key: 'editors',
+    defaultName: 'Editors',
+    dataType: 'options',
+    multiValue: true,
+    transientSeed: true,
+  },
+  {
+    key: 'contributors',
+    defaultName: 'Contributors',
+    dataType: 'options',
+    multiValue: true,
+    transientSeed: true,
+  },
   { key: 'container', defaultName: 'Container', dataType: 'plain' },
-  { key: 'publisher', defaultName: 'Publisher', dataType: 'options', multiValue: true, transientSeed: true },
+  {
+    key: 'publisher',
+    defaultName: 'Publisher',
+    dataType: 'options',
+    multiValue: true,
+    transientSeed: true,
+  },
   { key: 'place', defaultName: 'Place', dataType: 'plain' },
   { key: 'date', defaultName: 'Date', dataType: 'date' },
   { key: 'year', defaultName: 'Year', dataType: 'number' },
@@ -106,7 +130,12 @@ export const CATALOG: CatalogEntry[] = [
   { key: 'series', defaultName: 'Series', dataType: 'plain' },
   { key: 'number', defaultName: 'Number', dataType: 'plain' },
   { key: 'typeDetail', defaultName: 'Type Detail', dataType: 'plain' },
-  { key: 'itemType', defaultName: 'Item Type', dataType: 'options', optionSeed: ['Document'] },
+  {
+    key: 'itemType',
+    defaultName: 'Item Type',
+    dataType: 'options',
+    optionSeed: ['Document'],
+  },
   { key: 'doi', defaultName: 'DOI', dataType: 'url' },
   { key: 'url', defaultName: 'URL', dataType: 'url' },
   { key: 'abstract', defaultName: 'Abstract', dataType: 'plain' },
@@ -122,7 +151,11 @@ export const CATALOG: CatalogEntry[] = [
   { key: 'shortTitle', defaultName: 'Short Title', dataType: 'plain' },
 ];
 
-export const CATALOG_BY_KEY: Record<FieldKey, CatalogEntry> = Object.fromEntries(
+// `Object.fromEntries` widens to a string index signature, which TS won't narrow
+// back to the literal-keyed Record; the assertion is safe because CATALOG covers
+// every FieldKey.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+export const CATALOG_BY_KEY = Object.fromEntries(
   CATALOG.map((entry) => [entry.key, entry]),
 ) as Record<FieldKey, CatalogEntry>;
 
