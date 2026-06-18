@@ -1,0 +1,53 @@
+import os from 'node:os';
+import path from 'node:path';
+
+import fs from 'fs-extra';
+import { inc as semverInc } from 'semver';
+
+import pkg from '../../package.json' with { type: 'json' };
+
+import { genDir, relativeToRoot } from './paths.mts';
+
+const versionJsonPath = path.join(genDir, 'version.json');
+
+export async function getVersion(): Promise<string> {
+  const versionJsonExists = await fs.pathExists(versionJsonPath);
+
+  if (versionJsonExists) {
+    const version = await fs.readJson(versionJsonPath);
+    if (typeof version === 'string') {
+      console.log(`Found ${relativeToRoot(versionJsonPath)} with ${version}`);
+      return version;
+    }
+  }
+
+  const version = computeVersion();
+  console.log(`Writing ${relativeToRoot(versionJsonPath)} with ${version}`);
+  await fs.outputJson(versionJsonPath, version);
+  return version;
+}
+
+function computeVersion(): string {
+  const { GITHUB_ACTIONS, GITHUB_HEAD_REF, GITHUB_JOB } = process.env;
+
+  if (!GITHUB_ACTIONS) return getLocalVersion();
+
+  const isBuildJob = GITHUB_JOB === 'build';
+  if (!isBuildJob) return pkg.version;
+
+  const isReleasePR = Boolean(GITHUB_HEAD_REF?.startsWith('release-please'));
+  const baseVersion = isReleasePR ? pkg.version : getPatchBumpVersion();
+  return getPrereleaseVersion(baseVersion);
+}
+
+function getLocalVersion(): string {
+  return `${getPatchBumpVersion()}-${os.userInfo().username}.${os.hostname()}`;
+}
+
+function getPrereleaseVersion(baseVersion: string): string {
+  return `${baseVersion}-${process.env.GITHUB_RUN_NUMBER}`;
+}
+
+function getPatchBumpVersion(): string {
+  return semverInc(pkg.version, 'patch') || pkg.version;
+}

@@ -15,7 +15,271 @@ type-tag schema). The translator and old tags still exist but are being retired.
 | --- | --- |
 | 1 — Create the Tana `#reference` schema | ✅ done (in graph) |
 | 2 — Mapping prototype (item → Tana Paste) | ✅ done (`prototype/`) |
-| 3 — Fork notero, build the plugin | ⏳ keystone done (`src/tana/client.ts`); **fork not started** |
+| 3 — Fork notero, build the plugin | ⏳ **built + loaded in Zotero; auth + import work; mid live-verify** (see below) |
+
+### Live verification — IN PROGRESS (2026-06-17 eve) — RESUME HERE
+
+First real end-to-end sync succeeded (journal article "Climate change and meat
+eating…"); a long live-debugging session then hardened the sync engine and added
+features. Auth + `/nodes/search` deepObject + the create path are verified live.
+
+**Built but NOT yet reinstalled/verified in Zotero** — current XPI
+`xpi/zotana-0.1.1-jkroes.Mac.attlocal.net.xpi` (rebuilt 2026-06-17 eve), **86 tests
+passing / 13 files**. Changes this session (all detailed in the bullets below):
+1. **Reachability rebuild** — orphaned/trashed/purged stored node → rebuild (was a
+   bare read-200 check that silently wrote into dead "ghost" nodes).
+2. **Per-field diff** — write only changed fields (every `setFieldContent` replace
+   trashes the old value node; the old unconditional rewrite buried ~20/sync).
+3. **Reference-preserving warn-and-skip** — don't overwrite/clear a value node we
+   **own** that another node **links to**; report it in the ProgressWindow.
+4. **Entity fields via `setFieldOption`** — Creators/Editors/Contributors/Publisher
+   are now Options fields (multi-tag #Person + #Organization).
+5. **All links `[url](url)`** (DOI/URL/Item) — clickable on create (paste).
+6. **Partial-date granularity** — `YYYY` / `YYYY-MM` / `YYYY-MM-DD`.
+
+⏳ **NEXT (do first in new session):**
+- **REQUIRED Tana schema changes the new code depends on** (user was making these):
+  - Editors, Contributors, Publisher → **Options** fields (else `setFieldOption`
+    errors on them at sync time).
+  - DOI, URL, Item → **URL** fields.
+  Confirm these are done before reinstalling.
+- Reinstall the XPI, **restart Zotero** (version string unchanged), do a clean
+  create (delete the item's "Tana" child attachment first for a fresh node), then
+  walk `docs/verify-in-zotero.md` Tests A–D plus the new paths:
+  - warn-and-skip: reference a field's value node from another Tana node, change
+    that field in Zotero, re-sync → expect it skipped + a "Synced with warnings".
+  - URL render: confirm `[url](url)` shows clickable on create; note plain text on
+    a later change (README documents the `Iterate and convert URLs to URL nodes`
+    fixup).
+  - **Unverified assumption:** the REST `readNode` markdown carries the same
+    `<!-- node-id -->` comments the MCP read shows (the warn-and-skip parser relies
+    on it). If fields get overwritten with no warning, that format differs.
+
+Build note: `pnpm build` needs the sandbox OFF (Node 25 has no `fsevents` prebuilt
+→ chokidar `fs.watch` → `EMFILE`); outside the agent sandbox it builds fine. After
+`pnpm build`, run `node scripts/create-xpi.mts` to repackage the XPI (build only
+compiles to `build/`).
+
+### Stage 3 progress (2026-06-17)
+
+Plugin name decided: **Zotana** (id `zotana`). Upsert strategy decided:
+**in-place per-field** (preserve Tana node identity / inbound links).
+
+**Done — notero scaffold copied in and the Tana sync engine is ported & wired:**
+- notero tree rsynced into the repo (kept its Zotero scaffold + esbuild/vite-plus
+  toolchain). Bundle entry is `src/content/zotana.ts` (class `Zotana`, global
+  `Zotero.Zotana`) after the rebrand pass below.
+- Prototype ported to TS under **`src/content/tana/`**, reading the live Zotero API:
+  `constants.ts` (field/tag IDs), `tana-paste.ts` (types + serializer),
+  `entities.ts` (creator bucketing via `Zotero.CreatorTypes.getPrimaryIDForType`),
+  `reference-builder.ts` (item → `TanaReferenceNode`; base-field reads, six title
+  formats, live CSL via `Zotero.QuickCopy`, podcast container override).
+  `client.ts` moved here and gained `updateName` (the rename primitive).
+- **`data/item-data.ts`** rewritten: stores `{nodeId, title}` in a hidden Zotero
+  link-attachment (the upsert key + last-synced title for in-place rename).
+- **`sync/sync-regular-item.ts`** rewritten as the upsert: create → import paste +
+  capture node id; update → rename + per-field `setFieldContent`, resolving
+  Person/Org names → node IDs (search + create-if-missing). Only the `Item`
+  back-link is immutable/skipped on update; `Item Type` IS updated (see fixes
+  below).
+- **`sync/sync-job.ts`** builds `TanaClient` from prefs (token + parentNodeId +
+  optional baseUrl), `health()` preflight, maps `PageTitleFormat`→`TitleFormat`,
+  skips notes (deferred).
+- Service layer rewired: `sync-manager.ts` (regular items only, no Notion auth),
+  `service.ts`/`event-manager.ts`/`zotana.ts` stripped of Notion auth +
+  `getNotionClient`/`findDuplicates`. Prefs gained `tanaToken`,
+  `tanaParentNodeId`, `tanaBaseUrl`.
+- **Deleted** all Notion-only modules: `auth/`, `sync/notion-*`, `notion-utils/`,
+  `html-to-notion/`, `sync-note-item.ts`, `find-duplicates.ts`,
+  `property-builder.ts`, `protocol-handler-extension.ts`, and their tests.
+
+**Correctness fixes applied (2026-06-17, post-review):**
+- Item Type **is** updated on re-sync (set by localized name via
+  `setFieldContent`; only the immutable `Item` back-link is skipped).
+- Item Type value uses `Zotero.ItemTypes.getLocalizedString` (was the raw
+  internal type name).
+- Update path **clears** fields that went set → empty.
+- **Partial-date granularity (2026-06-17):** `normalizeDate`/`extractYear` now read
+  Zotero's multipart SQL date (`item.getField('date', true, true)` → `YYYY-MM-DD`
+  with `00` for missing parts) and emit the real granularity — full / `YYYY-MM` /
+  `YYYY` (Tana accepts all three; verified). Freeform/seasonal dates ("Spring 2016")
+  parse to a year with `00` month/day → emit just the year. No season→month padding
+  anymore. Both helpers exported + unit-tested (`reference-builder.spec.ts`).
+- **Entity fields are Options fields, written via `setFieldOption` (2026-06-17):**
+  Creators/Editors/Contributors/Publisher are converted in Tana to **Options**
+  fields (multi-tag: accept #Person AND #Organization, e.g. institutional authors).
+  The update path's `links` branch now writes them with `client.setFieldOption`
+  (optionId = entity node id), NOT `setFieldContent` — `setFieldContent` on an
+  Options field stores the id as a literal text option (junk). `setFieldOption`
+  errors on Instance-of fields, so this REQUIRES all four entity fields to be
+  Options. Write-method rules captured in memory `tana-field-types-write-methods`.
+  (DOI/URL stay URL-typed with plain URLs — URL fields show markdown literally;
+  Item stays Content with a markdown link, which renders as a real anchor.)
+- **Reference-preserving warn-and-skip (2026-06-17):** before overwriting or
+  clearing a scalar field, the update path checks whether that field's value node
+  is referenced by other Tana nodes (`search({linksTo:[valueNodeId]})`). If so it
+  leaves the field untouched (keeps its old signature so the next sync retries)
+  and reports the field name up to the sync job, which lists item → field(s) in
+  the ProgressWindow (kept open, headline "Synced with warnings"). Value-node ids
+  come from one `readNode(refId,1)` per sync-with-changes, parsed from the
+  `**Field**: value <!-- node-id: id -->` markdown (`parseFieldNodeIds`). Link
+  fields (options-from-supertags → #Person/#Org) are exempt (re-point, no trash);
+  dates can't be referenced. **Decisions:** edit-in-place was rejected (risks
+  retyping date/options); warnings repeat each sync until resolved (no
+  match-detection); message shows item + field name only (Tana shows the refs
+  in-app). **Live-verify caveat:** assumes the REST `readNode` markdown carries the
+  same `<!-- node-id -->` comments the MCP read shows — if it doesn't,
+  `parseFieldNodeIds` returns empty and the check silently no-ops (fields just get
+  overwritten). Confirm on first live test.
+- **Per-field diff (2026-06-17):** the update path now writes only fields whose
+  value changed since the last sync, and clears only fields that were previously
+  set. `TanaSyncData` gained a `fields: Record<attrId, signature>` map (scalar =
+  value; links = `tag:name` list, so an unchanged author list skips resolution +
+  write). Fixes a live-found bug: Tana implements a `setFieldContent` replace by
+  **trashing the prior value node**, so the old unconditional rewrite buried ~20
+  nodes in the Tana trash *every* sync. Now an unmodified re-sync writes nothing.
+  (One-time migration cost: an item synced by the pre-diff build has no stored
+  `fields` map, so its next sync rewrites everything once, then stays clean.)
+- Back-link handles **group libraries** (derives the group ID from the item's
+  web URI).
+- Tests added for the new engine: `tana/__tests__/{tana-paste,entities}.spec.ts`,
+  `sync/__tests__/sync-regular-item.spec.ts`; `sync-manager.spec.ts` rewritten
+  for regular-items-only. (Run with `pnpm test` after install.)
+
+**Deferred (agreed with user — replace, do not abandon):**
+- **PDF/EPUB annotation syncing** — DONE (2026-06-17). Highlights + underlines →
+  `#quote` nodes (name = selected text, comment → node **description**); note/text
+  → untagged plain node (name = comment); image → untagged placeholder
+  (`Image annotation (p. N)`); ink skipped. Nodes are **direct children of the
+  `#reference` node**. **Full per-annotation upsert**: `item-data` stores
+  `annotationKey → {nodeId, name, description}`; `sync-annotations.ts` creates new,
+  updates changed name/description in place, trashes annotations removed from
+  Zotero. New modules: `sync/annotations.ts` (read+normalize), `sync/annotations`
+  reader is pure; `sync/sync-annotations.ts` (the upsert), wired into
+  `sync-regular-item.ts` after the reference upsert. `client.updateName` →
+  generalized to `client.update(nodeId, {name?, description?})`. Annotation node
+  names are set via `update` (literal) not Paste, since highlight text can contain
+  `#`/`::`/`[[ ]]` — **verified live** that `update` stores those literally and the
+  `#quote` tag + description render. `getAnnotations`/annotation props added to
+  `types/zotero.d.ts`. 17 new tests (70 total, green).
+- **Rich-text note syncing** — still deferred. Standalone/child *note items*
+  (`item.getNote()` HTML) are NOT synced (sync-job still skips `isNote()` items);
+  the user scoped this session to annotations only. Would need an HTML→Tana-Paste
+  converter (notero's `html-to-notion` is the reference).
+- ~~**"Find duplicates"**~~ — dropped as a feature (2026-06-17). Zotana can't
+  create duplicates under normal use (the Tana nodeId is stored on the Zotero item
+  and updated in place), so a duplicate-finder wasn't the real need. What the user
+  actually wanted was **sync resilience to a node being deleted in Tana**, now
+  implemented:
+  - **Deleted-node policy (UPDATED 2026-06-17 — reachability, not read-200):**
+    `GET /nodes/{id}` returns **200 for a live node, a trashed node, AND an
+    orphaned "ghost"** (a node detached from every tree when its trash is emptied
+    but not yet garbage-collected — readable by ID, absent from search/UI); it
+    **404s only once fully purged**. So a bare read 200 can't tell a usable node
+    from a dead one. `sync-regular-item` now preflights **`nodeReachable`**:
+    `search({and:[{hasType:#reference},{textContains: stored.title}]}, {limit:50})`
+    and checks the stored nodeId is in the hits. **Reachable → update in place;
+    unreachable → rebuild** (discard the stale link + annotation map, fresh
+    `#reference` import; the "Tana" attachment is repointed by `saveTanaSyncData`).
+    **Policy change:** trashed + orphaned + purged all collapse to "rebuild" (the
+    search API excludes trashed nodes and can't distinguish trashed from ghost) —
+    chosen so the reference always reappears; rare cost is a duplicate if a node is
+    trashed then restored before the next sync. (Live-discovered via the first
+    real sync: 3 Person nodes appeared but the reference silently updated an
+    orphaned ghost. Tests: query-aware `search` mock; 74 passing.)
+  - **Annotation node 404 → recreate:** `sync-annotations` catches a 404 from an
+    in-place `update` and recreates that quote node (lazy — only on an actual
+    write, no extra calls in the happy path).
+- ~~**Entity-placement setting**~~ — DONE (2026-06-17). Decided: new
+  `#Person`/`#Organization` nodes always land in the workspace **Library**
+  (`{workspaceId}_STASH`), no pref. Rationale from live probes: the create path's
+  inline `[[Name #Person]]` is filed by Tana in the Library regardless of import
+  parent (not redirectable), so the **update path** now matches — `sync-job.ts`
+  resolves `entityParentNodeId = {workspaceId}_STASH` once per job (workspace
+  derived from an existing `#reference` node, since tag IDs are workspace-scoped;
+  falls back to the references parent if none), and `resolveEntityNodeId` creates
+  under it. (A future pref could override the update path if the user ever wants a
+  custom node — create-path placement stays Tana's call unless inline refs are
+  replaced with resolve-then-reference.)
+- **Entity resolution limit** — `resolveEntityNodeId` substring-searches with
+  `limit: 50` and matches the name exactly client-side. Known limitation: if an
+  exact match sits beyond the first 50 substring hits it's missed (the right
+  result is almost always in the first 50). Left as-is, documented.
+- Kept as-is (approved): author-date title uses Zotero's `firstCreator` string
+  (e.g. "Vaswani et al., 2017"), not the prototype's surname-only form.
+
+**Prefs UI + locale + rebrand — done (2026-06-17):**
+- **Prefs pane rewritten** (`prefs/preferences.tsx` + `preferences.xhtml`): Tana
+  API token (password), parent node ID, optional Local API URL (all bound via JS
+  to `extensions.zotana.{tanaToken,tanaParentNodeId,tanaBaseUrl}`), reference-node
+  title-format dropdown, sync-on-modify checkbox, collection-sync table. Notion
+  OAuth/DB-picker gone. `notionOptionID` removed from `collection-sync-config.ts`.
+- **Locale**: `src/locale/en-US/zotana.ftl` rewritten with Tana copy; zh-CN
+  (stale) deleted; `fluent-types.ts` hand-regenerated to match (re-run
+  `pnpm generate-fluent-types` after install to be safe).
+- **Rebrand**: `Notero`→`Zotana` and `notero`→`zotana` throughout — class + file
+  (`content/zotana.ts`), `get-global-zotana.ts`, `zotana-pref.ts`/`ZotanaPref`,
+  `extensions.zotana.` pref namespace + `prefs.js`, observer id, bundle entry +
+  bootstrap, `Zotero.Zotana` global, error ids `zotana-error-*`, CSS classes,
+  locale filename. `package.json` rebranded (name `zotana`, id `zotana@jkroes`,
+  icons `zotana-48/96.png`, **`@notionhq/client` and unused `zod` removed**).
+  `README.md` replaced with a Zotana one.
+
+**Build/test verified (2026-06-17, after `pnpm install`):**
+- `pnpm test` → **53 passing / 9 files** (incl. the new tana + sync-regular-item
+  specs).
+- `pnpm build` → esbuild bundles `bootstrap`, `content/zotana`, and
+  `prefs/preferences` cleanly; `manifest.json` generated with correct Zotana
+  branding. (In the agent sandbox the chokidar asset-copy step throws `EMFILE`
+  from `fs.watch` — environment-only, not a code issue; assets copy fine locally.)
+- Fixed `scripts/generate-update-manifest.mts` (dropped the notero Zotero-6
+  legacy entry that referenced the removed `pkg.xpi.zotero6`).
+- `pnpm typecheck` still reports errors **inside `node_modules/@voidzero-dev/*`**
+  (vite-plus's own `.d.ts` referencing optional deps + a vitest `File` conflict);
+  our `tsconfig` has no `skipLibCheck`. These are upstream/toolchain, not our
+  code — add `"skipLibCheck": true` to tsconfig if you want a clean `tsc`.
+
+**Remaining for stage 3:**
+1. **Live verify in Zotero** — load the build with a real token + parent node and
+   confirm a create + a re-sync, validating the flagged API shapes below.
+2. **CI/docs polish (low priority)** — `CHANGELOG.md`, `.github/`, `crowdin.yml`,
+   `release-please-config.json`, `.release-please-manifest.json`, and
+   `zotero.config.example.json` still carry upstream `notero`/`dvanoni` strings.
+   Not needed to build or run; rebrand when convenient.
+3. See **Deferred (agreed)** above: notes/annotation syncing + find-duplicates
+   (replace), entity-placement setting, etc.
+
+**De-risked against the live Local API (2026-06-17) — was "unverified", now resolved:**
+- Re-fetched the running server's `openapi.json` (it now documents
+  `/nodes/{id}/update`). **`client.updateName` was wrong and is fixed**: the REST
+  endpoint takes a flat `{ name: string | null }` (replace outright, `null`
+  clears), NOT the MCP `edit_node` `{name:{oldString,newString}}` search/replace
+  shape. Signature is now `updateName(nodeId, name)`; caller + test updated.
+- **Tana node-URL scheme** corrected in `item-data.ts` to `tana:<nodeId>` (Tana's
+  own deep-link, the form its read-node API emits), was the guessed
+  `https://app.tana.inc/?nodeid=`.
+- **`setFieldContent` confirmed live**: date fields take a bare ISO value
+  (`2021-06-15` → renders as a real date); reference/instance fields take a node
+  ID (renders as a `[[link]]`). Matches the code.
+- **Response shapes confirmed** to match `client.ts` types: `import` →
+  `{parentNodeId, targetNodeId, createdNodes:[{id,name}], message}`; `health` →
+  `{status:'ok'|'degraded', timestamp, nodeSpaceReady}`. `import`/`content`/
+  `option`/`tags` request bodies all match.
+- `pnpm test` still green (53 passing) after the fixes.
+
+**Authenticated REST round-trip — PASSED live (2026-06-17):** ran the full plugin
+write path against `localhost:8262` with a real Personal Access Token: `import`
+(200, `createdNodes:[{id,name}]` as parsed) → `update` rename with the **flat
+`{name}`** body (200) → `setFieldContent` date=bare ISO (200, renders as a real
+date) → `setFieldContent` reference=node ID (200, renders as a link) → `trash`
+(200). The write path is de-risked against the authenticated API, not just the
+spec/MCP façade.
+
+**Token gotcha (important for docs + live verify):** the Local API needs a
+**Personal Access Token** (`type:"personal"`), created from Tana's **account
+settings (top-right)**. The cloud **"Get API Token" / "Make API token"** token
+(a JWT with `nodeId`/`fileId`) is **rejected by the Local API with 401** — do not
+use it. Locale copy updated to say this.
 
 ## What exists in this repo
 
@@ -27,10 +291,11 @@ type-tag schema). The translator and old tags still exist but are being retired.
   `reference-builder.mjs` (item → ordered Tana field entries; base-field reads,
   title formats, podcast override), `tana-paste.mjs` (entries → Tana Paste text),
   `fixtures.mjs`, `build-samples.mjs`. See `prototype/README.md`.
-- **`src/tana/client.ts`** — thin REST client for the Tana Local API, grounded in
-  the server's `openapi.json`. Methods: `health`, `import` (returns created node
-  IDs), `setFieldContent` (the upsert primitive), `setFieldOption`, `setTags`,
-  `trash`, `readNode`, `search`. Injected `fetch` + Bearer token.
+- **`src/content/tana/client.ts`** — thin REST client for the Tana Local API,
+  grounded in the server's `openapi.json`. Methods: `health`, `import` (returns
+  created node IDs), `setFieldContent` (upsert primitive, accepts `null` to
+  clear), `setFieldOption`, `setTags`, `trash`, `readNode`, `search`,
+  `updateName`. Injected `fetch` + Bearer token.
 
 ## The Tana schema (already created in the Main workspace)
 
@@ -69,6 +334,14 @@ The write path is fully de-risked:
   resolves to `#reference`'s Date, not the legacy `#zotero` same-named field
   (paste scopes field resolution to the applied supertag). IDs in `constants.mjs`
   remain available if ID-based emission is ever preferred.
+- **Entity placement (2026-06-17 probes):** importing an **inline**
+  `- [[Name #Person]]` always files the new entity in the workspace **Library**
+  (`Root → Library`) regardless of the import parent, and leaves a stray
+  *reference* bullet under the parent. Importing an **explicit**
+  `- Name #[[^tagId]]` under `{workspaceId}_STASH` also lands the entity at
+  Library root but leaves **no** stray reference — so the plugin's update path
+  creates entities that way. `search` results include `workspaceId`; the Local
+  API has no node→workspace lookup (`GET /nodes/{id}` omits it).
 
 ## The Tana Local API (REST, not MCP)
 
@@ -80,47 +353,21 @@ Settings → API Tokens), Bearer header. Key endpoints (shapes in `client.ts`):
 · `.../option` · `POST /nodes/{nodeId}/tags|trash|update|move` · `GET /nodes/search`
 · `GET /nodes/{nodeId}` · `GET /tags/{tagId}/schema` · `GET /health`.
 
-## Next: stage 3 — the notero fork (NOT started)
+## Stage 3 — the notero fork (DONE; see "Stage 3 progress" at top)
 
-notero source is at **`~/repos/notero`** (read it before forking). Plan:
+The fork is built: scaffold copied, prototype ported to `src/content/tana/*.ts`,
+sync rewritten as an in-place upsert, Notion layer deleted, prefs/locale/rebrand
+done, tests passing, bundle building. The original 6-step plan that lived here is
+fully executed — see the **Stage 3 progress** and **Remaining for stage 3**
+sections at the top of this file for the current state and what's left (live
+verify in Zotero; deferred notes/find-duplicates/entity-placement).
 
-1. **Copy notero into this repo** as the plugin root, keeping its Zotero scaffold
-   and build toolchain (Vite+/esbuild): `bootstrap.ts`, manifest, locale `.ftl`,
-   the preferences pane, and `src/content/services/*` (collection watching,
-   sync-on-modify, context menus). Reconcile with the existing `src/tana/` and
-   `prototype/`.
-2. **Reuse, unchanged:** `services/*`, `sync/sync-job.ts` orchestration,
-   `sync/progress-window.ts`, `errors/`, and the Zotero-reading half of
-   `sync/property-builder.ts`.
-3. **Replace the Notion third:** delete `sync/notion-client.ts`,
-   `notion-types.ts`, `notion-utils/`, `notion-limits.ts`, `@notionhq/client`,
-   and the `auth/` Notion OAuth. In their place:
-   - `src/tana/client.ts` (done).
-   - Port `prototype/{constants,entities,reference-builder,tana-paste}.mjs` →
-     `src/tana/*.ts`, swapping fixture reads for live Zotero APIs:
-     `item.getField(baseField)` (Zotero resolves base fields),
-     `item.getCreators()` (exposes firstName/lastName/fieldMode/creatorTypeID),
-     `Zotero.QuickCopy.getContentFromItems(...)` for Full/In-Text Citation (CSL).
-   - Rewrite `sync/sync-regular-item.ts` as an **upsert**: if the item has a
-     stored Tana node ID → `setFieldContent`/`setFieldOption` per field (and
-     `update` for the name); else `import` the Tana Paste and capture the new id.
-     Add a `client.health()` preflight that fails gracefully ("open Tana").
-4. **Repurpose `sync/data/item-data.ts`** — notero stores the Notion page URL as
-   a hidden Zotero link-attachment so re-syncs find the page. Store the **Tana
-   node ID** the same way (this is the upsert key).
-5. **Prefs + rebrand:** replace Notion database ID/OAuth with a **token** field +
-   a **parent node ID** (where new `#reference` nodes land — e.g. Library
-   `NAoK7gu_J9RW_STASH` or Inbox `NAoK7gu_J9RW_CAPTURE_INBOX`). Rename
-   notero/Notion → the chosen plugin name throughout (locale, manifest, ids).
-6. **Notes/annotations (later):** notero's `html-to-notion/` → a `html-to-tana`
-   (or Tana Paste) equivalent for Zotero notes + PDF annotations.
-
-## Open decisions
-
-- **Plugin name** — defaulted to "Zotero to Tana" (`zotero-to-tana`); user may
-  prefer something snappier (e.g. "Zotana"). Decide before rebranding.
-- **Parent node** for new references (Library vs Inbox vs a dedicated node).
-- **Citations** are stubbed in the prototype; wire live CSL in the plugin.
+Resolved decisions (were "open"):
+- **Plugin name** → **Zotana** (`zotana`); see memory `zotana-plugin-name`.
+- **Upsert** → in-place per-field; see memory `zotana-upsert-strategy`.
+- **Citations** → wired live via `Zotero.QuickCopy` in `reference-builder.ts`.
+- **Parent node** → a user pref (`tanaParentNodeId`); the user picks Library vs
+  Inbox vs a dedicated node in Zotana preferences.
 
 ## Resume pointers
 

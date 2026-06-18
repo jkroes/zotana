@@ -9,8 +9,7 @@
  * API" v1.0.0). The app must be running with the Local API enabled and the target
  * workspace loaded; otherwise requests fail (use `health()` to preflight).
  *
- * `fetch` is injected so the plugin can pass the Zotero window's fetch, mirroring
- * how notero injects window.fetch into the Notion client.
+ * `fetch` is injected so the plugin can pass the Zotero window's fetch.
  */
 
 export interface TanaClientOptions {
@@ -56,6 +55,55 @@ export interface ReadResult {
 
 export type FieldMode = 'replace' | 'append';
 
+export interface Workspace {
+  id: string;
+  name?: string;
+  homeNodeId?: string;
+}
+
+export interface WorkspaceTag {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+/** Tana field data types accepted by `POST /tags/{tagId}/fields`. */
+export type FieldDataType =
+  | 'plain'
+  | 'number'
+  | 'date'
+  | 'url'
+  | 'email'
+  | 'checkbox'
+  | 'user'
+  | 'instance'
+  | 'options';
+
+export interface CreateFieldOptions {
+  name: string;
+  dataType: FieldDataType;
+  description?: string;
+  /** Required when dataType is 'instance' — the tag instances reference. */
+  sourceTagId?: string;
+  /** Required (non-empty) when dataType is 'options'. */
+  options?: string[];
+  isMultiValue?: boolean;
+}
+
+export interface CreateTagResult {
+  tagId: string;
+  tagName: string;
+  message: string;
+}
+
+export interface CreateFieldResult {
+  tagId: string;
+  fieldId: string;
+  fieldName: string;
+  dataType: string;
+  message: string;
+}
+
 /** Thrown for non-2xx responses, carrying the HTTP status and raw body. */
 export class TanaApiError extends Error {
   constructor(
@@ -98,11 +146,15 @@ export class TanaClient {
     return this.request('POST', `/nodes/${enc(parentNodeId)}/import`, { content });
   }
 
-  /** Set (replace by default) a plain/url/date/number/text field's value. The upsert primitive. */
+  /**
+   * Set (replace by default) a plain/url/date/number/text field's value, or pass
+   * `content: null` to clear the field. The upsert primitive. For reference
+   * fields the content is a node ID; for date fields, a bare ISO value.
+   */
   public async setFieldContent(
     nodeId: string,
     attributeId: string,
-    content: string,
+    content: string | null,
     mode: FieldMode = 'replace',
   ): Promise<void> {
     await this.request(
@@ -110,6 +162,19 @@ export class TanaClient {
       `/nodes/${enc(nodeId)}/fields/${enc(attributeId)}/content`,
       { content, mode },
     );
+  }
+
+  /**
+   * Update a node's name and/or description. The REST `POST /nodes/{id}/update`
+   * endpoint replaces each provided value outright (`null` clears it) and leaves
+   * omitted fields untouched — not the search/replace shape the MCP `edit_node`
+   * tool exposes. (Verified against the live server, 2026-06-17.)
+   */
+  public async update(
+    nodeId: string,
+    fields: { name?: string | null; description?: string | null },
+  ): Promise<void> {
+    await this.request('POST', `/nodes/${enc(nodeId)}/update`, fields);
   }
 
   /** Set an options field to a predefined option (e.g. Item Type). */
@@ -145,16 +210,59 @@ export class TanaClient {
     return this.request('GET', `/nodes/${enc(nodeId)}`, undefined, { maxDepth });
   }
 
-  /** Structured search (same query shape as the MCP search_nodes tool). */
+  /**
+   * Structured search (same query shape as the MCP search_nodes tool). The
+   * `/nodes/search` endpoint serializes `query` and `workspaceIds` as OpenAPI
+   * `deepObject` params — bracketed keys with LITERAL brackets (e.g.
+   * `query[and][0][hasType]=…`), not a JSON string. URL query brackets are not
+   * in the percent-encode set, so `fetch` leaves them intact. (Verified live.)
+   */
   public search(
     query: object,
     opts: { workspaceIds?: string[]; limit?: number } = {},
   ): Promise<SearchNode[]> {
-    return this.request('GET', '/nodes/search', undefined, {
-      query: JSON.stringify(query),
-      ...(opts.workspaceIds ? { workspaceIds: opts.workspaceIds.join(',') } : {}),
-      ...(opts.limit ? { limit: opts.limit } : {}),
+    const params = deepObjectParams('query', query);
+    opts.workspaceIds?.forEach((id, index) => {
+      params.push(`workspaceIds[${index}]=${encodeURIComponent(id)}`);
     });
+    if (opts.limit) params.push(`limit=${opts.limit}`);
+
+    return this.request('GET', `/nodes/search?${params.join('&')}`);
+  }
+
+  /** List the workspaces available to this token. */
+  public listWorkspaces(): Promise<Workspace[]> {
+    return this.request('GET', '/workspaces');
+  }
+
+  /** List the supertags defined in a workspace (used to resolve a tag by name). */
+  public listWorkspaceTags(workspaceId: string): Promise<WorkspaceTag[]> {
+    return this.request('GET', `/workspaces/${enc(workspaceId)}/tags`);
+  }
+
+  /** Create a new supertag in a workspace. */
+  public createTag(
+    workspaceId: string,
+    options: { name: string; description?: string; extendsTagIds?: string[] },
+  ): Promise<CreateTagResult> {
+    return this.request('POST', `/workspaces/${enc(workspaceId)}/tags`, options);
+  }
+
+  /** Add a typed field to a supertag. Returns the new attribute ID. */
+  public addField(
+    tagId: string,
+    options: CreateFieldOptions,
+  ): Promise<CreateFieldResult> {
+    return this.request('POST', `/tags/${enc(tagId)}/fields`, options);
+  }
+
+  /** Read a supertag's schema as markdown (field names + attribute IDs). */
+  public async getTagSchema(tagId: string): Promise<string> {
+    const result = (await this.request(
+      'GET',
+      `/tags/${enc(tagId)}/schema`,
+    )) as { markdown?: string };
+    return result.markdown ?? '';
   }
 
   private async request(
@@ -196,4 +304,26 @@ export class TanaClient {
 
 function enc(segment: string): string {
   return encodeURIComponent(segment);
+}
+
+/**
+ * Serialize a value as OpenAPI `deepObject` query params: nested objects/arrays
+ * become bracketed keys (`root[a][0][b]=…`). Brackets are left literal (the URL
+ * query percent-encode set excludes them); only values are encoded.
+ */
+function deepObjectParams(rootKey: string, value: unknown): string[] {
+  const pairs: string[] = [];
+
+  const walk = (key: string, val: unknown): void => {
+    if (Array.isArray(val)) {
+      val.forEach((item, index) => walk(`${key}[${index}]`, item));
+    } else if (val !== null && typeof val === 'object') {
+      for (const [k, v] of Object.entries(val)) walk(`${key}[${k}]`, v);
+    } else {
+      pairs.push(`${key}=${encodeURIComponent(String(val))}`);
+    }
+  };
+
+  walk(rootKey, value);
+  return pairs;
 }
