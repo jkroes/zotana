@@ -168,7 +168,9 @@ describe('syncRegularItem — update path', () => {
 
     // node not re-imported on update; the existing entity is reused, not created
     expect(client.import).not.toHaveBeenCalled();
-    expect(client.update).toHaveBeenCalledWith('node1', { name: 'Vaswani, 2017' });
+    expect(client.update).toHaveBeenCalledWith('node1', {
+      name: 'Vaswani, 2017',
+    });
 
     expect(client.setFieldContent).toHaveBeenCalledWith(
       'node1',
@@ -331,9 +333,13 @@ describe('syncRegularItem — update path', () => {
       if (query?.linksTo) return Promise.resolve([{ id: 'x' }]); // shared across papers
       const type = query?.and?.[0]?.hasType;
       if (type === TAG.reference)
-        return Promise.resolve([{ id: 'node1', name: 'Vaswani, 2017', inTrash: false }]);
+        return Promise.resolve([
+          { id: 'node1', name: 'Vaswani, 2017', inTrash: false },
+        ]);
       if (type === TAG.Person)
-        return Promise.resolve([{ id: 'resolved', name: 'Ashish Vaswani', inTrash: false }]);
+        return Promise.resolve([
+          { id: 'resolved', name: 'Ashish Vaswani', inTrash: false },
+        ]);
       return Promise.resolve([]);
     });
 
@@ -418,6 +424,48 @@ describe('syncRegularItem — update path', () => {
       FIELD.creators.id,
       'newperson',
       'replace',
+    );
+  });
+
+  it('writes each optionList value as its own option (replace then append)', async () => {
+    const item = createZoteroItemMock();
+    const client = createClientMock();
+    mockedBuildReference.mockResolvedValue({
+      title: 'Vaswani, 2017',
+      tag: 'reference',
+      tagId: TAG.reference,
+      fields: [
+        {
+          name: 'Tags',
+          id: 'fid-tags',
+          type: 'optionList',
+          values: ['philosophy', 'reading'],
+        },
+      ],
+    });
+    mockedGetTanaSyncData.mockReturnValue({
+      nodeId: 'node1',
+      title: 'Vaswani, 2017',
+      fields: {},
+      annotations: {},
+    });
+    mockSearchByType(client, {
+      [TAG.reference]: [{ id: 'node1', name: 'Vaswani, 2017', inTrash: false }],
+    });
+
+    await syncRegularItem(item, makeParams(client));
+
+    expect(client.setFieldContent).toHaveBeenCalledWith(
+      'node1',
+      'fid-tags',
+      'philosophy',
+      'replace',
+    );
+    expect(client.setFieldContent).toHaveBeenCalledWith(
+      'node1',
+      'fid-tags',
+      'reading',
+      'append',
     );
   });
 });

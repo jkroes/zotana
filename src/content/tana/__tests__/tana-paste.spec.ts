@@ -24,7 +24,12 @@ describe('toTanaPaste', () => {
     const paste = toTanaPaste(
       node([
         { name: 'Container', id: 'c', type: 'plain', value: 'NeurIPS' },
-        { name: 'Item Type', id: 't', type: 'options', value: 'Journal Article' },
+        {
+          name: 'Item Type',
+          id: 't',
+          type: 'options',
+          value: 'Journal Article',
+        },
       ]),
     );
     expect(paste).toContain('  - Container:: NeurIPS');
@@ -40,11 +45,29 @@ describe('toTanaPaste', () => {
 
   it('wraps url-typed values as a [url](url) markdown link', () => {
     const paste = toTanaPaste(
-      node([{ name: 'DOI', id: 'd', type: 'url', value: 'https://doi.org/10.x' }]),
+      node([
+        { name: 'DOI', id: 'd', type: 'url', value: 'https://doi.org/10.x' },
+      ]),
     );
     expect(paste).toContain(
       '  - DOI:: [https://doi.org/10.x](https://doi.org/10.x)',
     );
+  });
+
+  it('renders an optionList field as one indented plain-text node per value', () => {
+    const paste = toTanaPaste(
+      node([
+        {
+          name: 'Tags',
+          id: 'tg',
+          type: 'optionList',
+          values: ['philosophy', 'reading'],
+        },
+      ]),
+    );
+    expect(paste).toContain('  - Tags::');
+    expect(paste).toContain('    - philosophy');
+    expect(paste).toContain('    - reading');
   });
 
   it('renders link fields as an indented list of entity references', () => {

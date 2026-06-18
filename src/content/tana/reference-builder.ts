@@ -122,7 +122,7 @@ class ReferenceBuilder {
     // and overloads seriesTitle for the show name, so promote it to Container.
     this.pushScalar(
       'container',
-      'plain',
+      'options',
       this.getField('publicationTitle') ||
         (isPodcast ? this.getField('seriesTitle') : undefined),
     );
@@ -167,8 +167,8 @@ class ReferenceBuilder {
     this.pushScalar('abstract', 'plain', this.getField('abstractNote'));
     this.pushScalar('fullCitation', 'plain', await this.getCitation(false));
     this.pushScalar('inTextCitation', 'plain', await this.getCitation(true));
-    this.pushScalar('collections', 'plain', this.getCollections());
-    this.pushScalar('tags', 'plain', this.getTags());
+    this.pushOptionList('collections', this.getCollections());
+    this.pushOptionList('tags', this.getTags());
     this.pushScalar('extra', 'plain', this.getField('extra'));
     this.pushScalar('citationKey', 'plain', this.getField('citationKey'));
     this.pushScalar('dateAdded', 'date', isoDate(item.dateAdded));
@@ -206,19 +206,30 @@ class ReferenceBuilder {
     this.fields.push({ name: field.name, id: field.id, type: 'links', links });
   }
 
-  private getCollections(): string | undefined {
-    const names = Zotero.Collections.get(this.item.getCollections())
-      .map((collection) => collection.name)
-      .filter(Boolean);
-    return names.length ? names.join(', ') : undefined;
+  /** A multi-value options field: one option node per value (e.g. Tags). */
+  private pushOptionList(key: FieldKey, values: string[]): void {
+    if (!values.length) return;
+    const field = this.schema.fields[key];
+    if (!field) return; // field disabled or unresolved → skip
+    this.fields.push({
+      name: field.name,
+      id: field.id,
+      type: 'optionList',
+      values,
+    });
   }
 
-  private getTags(): string | undefined {
-    const tags = this.item
+  private getCollections(): string[] {
+    return Zotero.Collections.get(this.item.getCollections())
+      .map((collection) => collection.name)
+      .filter(Boolean);
+  }
+
+  private getTags(): string[] {
+    return this.item
       .getTags()
       .map(({ tag }) => tag)
       .filter(Boolean);
-    return tags.length ? tags.join(', ') : undefined;
   }
 
   private async getFilePath(): Promise<string | undefined> {

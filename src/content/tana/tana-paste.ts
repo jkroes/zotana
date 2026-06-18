@@ -25,13 +25,16 @@ export type TanaScalarType =
   | 'options'
   | 'item';
 
-export type TanaFieldType = TanaScalarType | 'links';
+export type TanaFieldType = TanaScalarType | 'links' | 'optionList';
 
 export type TanaLink = { name: string; tag: EntityTag };
 
 export type TanaField =
   | { name: string; id: string; type: TanaScalarType; value: string }
-  | { name: string; id: string; type: 'links'; links: TanaLink[] };
+  | { name: string; id: string; type: 'links'; links: TanaLink[] }
+  // Multi-value options field with plain-text values (one node per value),
+  // e.g. Tags and Collections.
+  | { name: string; id: string; type: 'optionList'; values: string[] };
 
 export type TanaReferenceNode = {
   title: string;
@@ -44,7 +47,10 @@ function fieldLabel(name: string): string {
   return name.includes(' ') ? `[[${name}]]` : name;
 }
 
-function scalarValueText(field: { type: TanaScalarType; value: string }): string {
+function scalarValueText(field: {
+  type: TanaScalarType;
+  value: string;
+}): string {
   switch (field.type) {
     case 'date':
       return `[[date:${field.value}]]`;
@@ -79,6 +85,12 @@ export function toTanaPaste(
       lines.push(`  - ${label}::`);
       for (const link of field.links) {
         lines.push(`    - ${linkMarkup(link)}`);
+      }
+    } else if (field.type === 'optionList') {
+      // One child node per option value (multi-value options field).
+      lines.push(`  - ${label}::`);
+      for (const value of field.values) {
+        lines.push(`    - ${value}`);
       }
     } else {
       lines.push(`  - ${label}:: ${scalarValueText(field)}`);
