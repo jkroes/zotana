@@ -33,9 +33,7 @@ export default defineConfig({
       'shared-node-browser': true,
       es2022: true,
     },
-    // `prototype/` is a standalone, pre-plugin mapping harness (untyped ESM, prints
-    // samples to the console); the type-aware plugin rules don't apply to it.
-    ignorePatterns: ['build', 'gen', 'prototype'],
+    ignorePatterns: ['build', 'gen'],
     rules: {
       'import/no-default-export': 'error',
       'no-console': 'error',

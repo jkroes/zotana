@@ -1,6 +1,5 @@
 /**
  * Types for a built #reference node, plus serialization to Tana Paste text.
- * Ported from prototype/tana-paste.mjs.
  *
  * Layout (2-space indents):
  *   - <Title> #reference

@@ -1,6 +1,6 @@
 /**
  * Builds the structured #reference node for one Zotero item, reading the live
- * Zotero API. Ported from prototype/reference-builder.mjs (fixtures → Zotero).
+ * Zotero API (ported from the original fixture-driven mapping harness).
  *
  * Field reads use Zotero BASE fields (publicationTitle, place, date, type,
  * number, volume, pages, publisher) so one #reference tag covers every item type;

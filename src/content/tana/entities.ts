@@ -1,6 +1,6 @@
 /**
- * Creator-role bucketing + Person/Organization routing. Ported from
- * prototype/entities.mjs, reading the live Zotero API instead of fixtures.
+ * Creator-role bucketing + Person/Organization routing, reading the live
+ * Zotero API instead of fixtures (ported from the original mapping harness).
  *
  *  - PRIMARY-ROLE-AWARE: the lead bucket holds the item type's *primary* creator
  *    role (author, but presenter/podcaster/director/... per type), resolved via
@@ -24,10 +24,7 @@ export type CreatorBuckets = {
 /** "First Last" for people; the single-field name for institutions. */
 export function creatorName(creator: Zotero.Creator): string {
   if (creator.fieldMode === 1) return creator.lastName.trim();
-  return [creator.firstName, creator.lastName]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  return [creator.firstName, creator.lastName].filter(Boolean).join(' ').trim();
 }
 
 /** Institutional creators (fieldMode 1) → Organization; everyone else → Person. */
