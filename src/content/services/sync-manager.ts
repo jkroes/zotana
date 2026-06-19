@@ -83,8 +83,10 @@ export class SyncManager implements Service {
 
   /**
    * Filter to items whose synced source content changed since their last sync,
-   * then enqueue those. An item that was never synced (or synced before content
-   * signatures existed) has no baseline and always syncs.
+   * then enqueue those. The modify path only ever updates an item that already
+   * has a Tana node (never-synced items are filtered out upstream in
+   * `getItemsForNotifierEvent`); an item synced before content signatures
+   * existed has no baseline and always syncs as an update.
    */
   private async enqueueChangedItems(items: readonly Zotero.Item[]) {
     const changed: Zotero.Item[] = [];
@@ -151,7 +153,15 @@ export class SyncManager implements Service {
       case 'collection-item.add':
         return Zotero.Items.get(this.getIndexedIDs(1, ids));
       case 'item.modify':
-        return Zotero.Items.get(ids).filter((item) => item.isRegularItem());
+        // A modify only UPDATES an item that already has a Tana node; it never
+        // creates one. This stops deleting the hidden "Tana" sync attachment
+        // (which makes Zotero fire item.modify on the parent) from recreating
+        // the node — the deletion disconnects the item; creation stays on
+        // collection-add / manual sync. Non-"Tana" attachment edits are already
+        // no-op-skipped via the content signature.
+        return Zotero.Items.get(ids).filter(
+          (item) => item.isRegularItem() && getTanaSyncData(item) !== undefined,
+        );
       case 'item-tag.modify':
       case 'item-tag.remove':
         return Zotero.Items.get(this.getIndexedIDs(0, ids));

@@ -95,6 +95,11 @@ beforeEach(() => {
 afterEach(() => {
   vi.runOnlyPendingTimers();
   vi.useRealTimers();
+  // `clearMocks` resets call history but not implementations, so a persistent
+  // `mockReturnValue` would leak into later tests. The modify path reads these
+  // twice per event, so tests set persistent values — reset them here.
+  mockedGetTanaSyncData.mockReset();
+  mockedContentSignature.mockReset();
 });
 
 describe('SyncManager', () => {
@@ -259,6 +264,10 @@ describe('SyncManager', () => {
 
     it('syncs item when enabled and item is in sync-enabled collection', async () => {
       const { eventManager } = setup();
+      // A modify only updates an item that already has a Tana node, so it needs
+      // stored data with a changed signature to enqueue.
+      mockedGetTanaSyncData.mockReturnValue(storedData('old-sig'));
+      mockedContentSignature.mockResolvedValue('new-sig');
 
       eventManager.emit('notifier-event', 'item.modify', [regularItem.id]);
 
@@ -301,8 +310,8 @@ describe('SyncManager', () => {
   describe('no-op skip on the modify path', () => {
     it('skips sync when synced content is unchanged', async () => {
       const { eventManager } = setup();
-      mockedGetTanaSyncData.mockReturnValueOnce(storedData('same-sig'));
-      mockedContentSignature.mockResolvedValueOnce('same-sig');
+      mockedGetTanaSyncData.mockReturnValue(storedData('same-sig'));
+      mockedContentSignature.mockResolvedValue('same-sig');
 
       eventManager.emit('notifier-event', 'item.modify', [regularItem.id]);
       await vi.runAllTimersAsync();
@@ -312,8 +321,8 @@ describe('SyncManager', () => {
 
     it('syncs when synced content changed', async () => {
       const { eventManager } = setup();
-      mockedGetTanaSyncData.mockReturnValueOnce(storedData('old-sig'));
-      mockedContentSignature.mockResolvedValueOnce('new-sig');
+      mockedGetTanaSyncData.mockReturnValue(storedData('old-sig'));
+      mockedContentSignature.mockResolvedValue('new-sig');
 
       eventManager.emit('notifier-event', 'item.modify', [regularItem.id]);
       await vi.runAllTimersAsync();
@@ -323,7 +332,7 @@ describe('SyncManager', () => {
       );
     });
 
-    it('syncs an item with no stored signature', async () => {
+    it('does not create a node on modify when the item has no Tana sync data (e.g. "Tana" attachment deleted)', async () => {
       const { eventManager } = setup();
       mockedGetTanaSyncData.mockReturnValueOnce(undefined);
 
@@ -331,9 +340,7 @@ describe('SyncManager', () => {
       await vi.runAllTimersAsync();
 
       expect(mockedContentSignature).not.toHaveBeenCalled();
-      expect(mockedPerformSyncJob.mock.lastCall?.[0]).toStrictEqual(
-        new Set([regularItem.id]),
-      );
+      expect(performSyncJob).toHaveBeenCalledTimes(0);
     });
   });
 
@@ -342,13 +349,10 @@ describe('SyncManager', () => {
       const { eventManager } = setup();
 
       // Changed content, so each modify would normally enqueue — proving the
-      // guard (not the no-op skip) is what suppresses the re-entrant sync.
-      mockedGetTanaSyncData
-        .mockReturnValueOnce(storedData('old-sig'))
-        .mockReturnValueOnce(storedData('old-sig'));
-      mockedContentSignature
-        .mockResolvedValueOnce('new-sig')
-        .mockResolvedValueOnce('new-sig');
+      // guard (not the no-op skip) is what suppresses the re-entrant sync. The
+      // item stays synced throughout, so use persistent stored data / signature.
+      mockedGetTanaSyncData.mockReturnValue(storedData('old-sig'));
+      mockedContentSignature.mockResolvedValue('new-sig');
 
       // Keep the first sync in flight until we release it.
       let finishJob!: () => void;

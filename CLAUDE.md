@@ -92,6 +92,8 @@ enabled}] }`, persisted as JSON in the `schemaConfig` pref. `mergeSchemaConfig`
   optional Local API URL, title-format dropdown, sync-on-modify, collection table.
 - **`data/item-data.ts`** — stores `{nodeId, title}` + the annotation map +
   per-field signature map in a hidden Zotero link attachment (the upsert key).
+  Both the attachment create (`linkFromURL`) and the note save (`saveTx`) pass
+  `skipNotifier: true` (see decisions below).
 - **`sync/sync-job.ts`** — builds the client from prefs, runs `ensureSchema`,
   maps title format, skips note items.
 - **`sync/sync-regular-item.ts`** — the upsert (reachability check, per-field
@@ -151,6 +153,21 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
 - **Entity nodes land in the workspace Library** (`{workspaceId}_STASH`); Tana
   files inline `[[Name #Person]]` refs there regardless of import parent, so the
   update path matches.
+- **One `Annotation` field per annotation tag, resolved by name.** Each of
+  `#highlight` / `#comment` / `#image` gets its **own** `Annotation` back-link
+  field, because the Local API's `POST /tags/{tagId}/fields` only ever _creates_
+  a field (name + dataType) — there's no way to attach an existing field id to a
+  second tag, and `ensureSchema` resolves each tag's field independently from
+  _that tag's_ `/tags/{id}/schema` markdown. So three tags ⇒ three `Annotation`
+  fields by design. A user **can safely merge them into one** in Tana: resolution
+  is purely by name (`ANNOTATION_FIELD_NAME = 'Annotation'`), so as long as all
+  three tags still carry a field literally named `Annotation` (still a URL field)
+  after the merge, sync keeps writing back-links to the single merged field. If
+  the merge drops the field from any tag or renames it, the next sync's
+  `ensureSchema` recreates a fresh `Annotation` on the tag(s) missing it by that
+  name — reintroducing duplicates. Existing annotation back-links are unaffected
+  either way: the back-link is written only at node creation, never on update
+  (`sync-annotations.ts` updates touch only name/description).
 - **Partial-date granularity** — emit `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` from
   Zotero's multipart SQL date; no season→month padding.
 - **Sync-on-modify = global debounce + content-signature no-op skip.**
@@ -161,6 +178,28 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   `syncInProgress`; no per-item timers. A deselect-flush (sync on item-tree
   `onSelect`) was tried and **removed**: `onSelect` also fires on our own
   attachment writes, re-entering `performSync` and creating duplicate nodes.
+- **Modify never creates.** The `item.modify` auto-sync path only _updates_ an
+  item that already has a Tana node — `getItemsForNotifierEvent` filters out
+  items with no stored sync data (`getTanaSyncData(item) === undefined`). Creation
+  happens only via `collection-item.add` (drag into a synced collection) or a
+  manual sync. This stops deleting the hidden "Tana" attachment — which makes
+  Zotero fire `item.modify` on the parent, and which is the ghost-node recovery
+  action — from immediately recreating the node; the deletion disconnects the
+  item and a manual sync rebuilds it. (Non-"Tana" attachment edits were already
+  no-op-skipped: the "Tana" attachment survives, so the content signature is
+  unchanged. Only deleting the "Tana" attachment destroyed the baseline.)
+- **`skipNotifier` on the sync-data attachment write — re-entrancy guard, at a
+  cosmetic cost.** `saveTanaSyncData` creates/saves the hidden "Tana" attachment
+  with `skipNotifier: true` (both `linkFromURL` and `saveTx`) so persisting our
+  own sync data can't emit an `item.add`/`item.modify` that re-enters the sync
+  and duplicates the node (same re-entrancy class as the removed deselect-flush
+  and the `syncingItemIDs` guard). **Known cosmetic effect:** because the notifier
+  never fires, Zotero's item tree doesn't redraw, so a freshly created "Tana"
+  attachment doesn't appear under the item until the row is forced to re-render
+  (collapse/expand, reselect, or library reload). The data is fully persisted;
+  only the tree rendering lags. Left as-is deliberately — nudging the tree to
+  refresh without routing through the subscribed notifier is possible but carries
+  re-entrancy risk, so it's not worth it for a purely visual lag.
 
 ## The Tana Local API
 
