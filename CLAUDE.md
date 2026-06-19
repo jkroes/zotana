@@ -21,9 +21,16 @@ in `docs/RELEASING.md`.
 
 ## After pushing: watch CI to green
 
+A **husky + lint-staged pre-commit hook** runs `vp fmt` on staged source/doc
+files (config in `package.json`'s `lint-staged`; hook in `.husky/pre-commit`,
+auto-installed by the `prepare` script). So formatting is normally fixed before
+it's committed — but lint, type, test, and build are _not_ run locally and still
+gate in CI.
+
 Whenever you push to `main`, the **Build** workflow runs `vp run verify`
-(`vp check` + tests) and builds the plugin. After any push, watch it through to
-completion and don't consider the work done until it's green:
+(`vp check` = format + lint + types, then tests) and builds the plugin. After any
+push, watch it through to completion and don't consider the work done until it's
+green:
 
 ```sh
 gh run watch $(gh run list --branch main --workflow Build --limit 1 \
