@@ -27,6 +27,17 @@ export class SyncManager implements Service {
 
   private syncInProgress = false;
 
+  /**
+   * IDs of items whose sync is currently running. The modify path ignores these
+   * so a sync's own follow-on `item.modify` notifications can't re-enqueue it.
+   * In particular, editing a title makes Zotero auto-rename the linked file
+   * (File Renaming pref), which fires a delayed `modify` on the parent item ~250ms
+   * later — landing while the sync is still persisting its new content signature.
+   * Without this guard that notification races the persist, reads the stale
+   * signature, and starts a duplicate sync (a second "Synced" ProgressWindow).
+   */
+  private readonly syncingItemIDs = new Set<Zotero.Item['id']>();
+
   public startup({
     dependencies: { eventManager },
   }: ServiceParams<'eventManager'>) {
@@ -84,6 +95,11 @@ export class SyncManager implements Service {
   }
 
   private async hasSyncableChange(item: Zotero.Item): Promise<boolean> {
+    // Ignore notifications for an item whose sync is still running — they are our
+    // own write-back cascade (see syncingItemIDs), not a fresh user edit. A real
+    // edit after the sync finishes recomputes a different signature and syncs then.
+    if (this.syncingItemIDs.has(item.id)) return false;
+
     const stored = getTanaSyncData(item);
     if (!stored?.contentSig) return true;
     try {
@@ -223,7 +239,12 @@ export class SyncManager implements Service {
     this.queuedSync = undefined as QueuedSync | undefined;
     this.syncInProgress = true;
 
-    await performSyncJob(itemIDs, mainWindow);
+    itemIDs.forEach((id) => this.syncingItemIDs.add(id));
+    try {
+      await performSyncJob(itemIDs, mainWindow);
+    } finally {
+      itemIDs.forEach((id) => this.syncingItemIDs.delete(id));
+    }
 
     if (this.queuedSync && !this.queuedSync.timeoutID) {
       await this.performSync();

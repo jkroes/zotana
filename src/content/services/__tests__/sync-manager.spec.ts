@@ -337,6 +337,48 @@ describe('SyncManager', () => {
     });
   });
 
+  describe('in-flight guard', () => {
+    it('ignores modify notifications for an item whose sync is still running', async () => {
+      const { eventManager } = setup();
+
+      // Changed content, so each modify would normally enqueue — proving the
+      // guard (not the no-op skip) is what suppresses the re-entrant sync.
+      mockedGetTanaSyncData
+        .mockReturnValueOnce(storedData('old-sig'))
+        .mockReturnValueOnce(storedData('old-sig'));
+      mockedContentSignature
+        .mockResolvedValueOnce('new-sig')
+        .mockResolvedValueOnce('new-sig');
+
+      // Keep the first sync in flight until we release it.
+      let finishJob!: () => void;
+      mockedPerformSyncJob.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishJob = resolve;
+          }),
+      );
+
+      // First edit starts a sync that stays mid-flight.
+      eventManager.emit('notifier-event', 'item.modify', [regularItem.id]);
+      await vi.runAllTimersAsync();
+      expect(mockedPerformSyncJob).toHaveBeenCalledTimes(1);
+
+      // Zotero's File Renaming cascade fires a second modify for the same item
+      // while the first sync is still persisting — it must be ignored.
+      eventManager.emit('notifier-event', 'item.modify', [regularItem.id]);
+      await vi.runAllTimersAsync();
+      expect(mockedPerformSyncJob).toHaveBeenCalledTimes(1);
+
+      // After the sync finishes, a later genuine edit syncs again.
+      finishJob();
+      await vi.runAllTimersAsync();
+      eventManager.emit('notifier-event', 'item.modify', [regularItem.id]);
+      await vi.runAllTimersAsync();
+      expect(mockedPerformSyncJob).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('receiving `item-tag.remove` notifier event', () => {
     it('syncs item when enabled and item is in sync-enabled collection', async () => {
       const { eventManager } = setup();

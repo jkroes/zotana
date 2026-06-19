@@ -169,7 +169,9 @@ export async function saveTanaSyncData(
   }
 
   attachment.setNote(buildAttachmentNote(data));
-  await attachment.saveTx();
+  // skipNotifier so persisting our own sync data doesn't emit a notification that
+  // re-enters the sync path (matches the create branch above and saveTanaTag).
+  await attachment.saveTx({ skipNotifier: true });
 }
 
 export async function saveTanaTag(item: Zotero.Item): Promise<void> {
