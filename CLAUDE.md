@@ -189,11 +189,25 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
 
 ## Open work
 
-- **Live verification (2026-06-18, v0.2):** create, in-place update, annotations
-  → `#quote`, multi-item batches, and the sync-on-modify no-op skip all confirmed
-  against a real Zotero + Tana. The REST `readNode` markdown **does** carry the
-  `<!-- node-id -->` comments the warn-and-skip parser needs (previously unproven).
-  Still unwalked live: Test D (purged-node rebuild) and the URL-render path.
+- **Live verification (2026-06-19, v0.2):** confirmed against real Zotero + Tana —
+  create, in-place update, multi-item batch, sync-on-modify no-op skip, Title
+  field, **Test D** (both trashed _and_ purged nodes rebuild; attachment repoints),
+  **warn-and-skip** (referenced value node preserved; releases when the backlink is
+  removed), **field-clear** (value node cleared + node name re-renders),
+  **URL-render** (clickable on create, plain text on update), and **annotation
+  add/delete deltas**. Caveat: `linksTo` only indexes a reference made in the Tana
+  UI, not one created via the API/Inbox. Still unwalked: from-scratch schema
+  bootstrap, non-author-date title formats, group-library items, date granularity.
+- **Duplicate-ProgressWindow fix (branch `fix/duplicate-sync-progresswindow`, not
+  merged):** editing a title makes Zotero's File Renaming auto-rename the linked
+  PDF, firing a 2nd `item.modify` mid-sync that raced the contentSig persist and
+  started a duplicate sync. Fixed with an in-flight guard in `sync-manager.ts`
+  (`syncingItemIDs`) + `skipNotifier` on `saveTanaSyncData`'s update saveTx.
+- **Annotation tags + back-link (implemented, pending live bootstrap test):**
+  highlight→`#highlight`, note→`#comment`, image→`#image`, each with an `Annotation`
+  URL field holding a `zotero://open-pdf/...?annotation=KEY` deep link (written in
+  the create paste, clickable, never rewritten). Replaces the old bare `#quote` /
+  untagged-children model.
 - **Rich-text note syncing** — deferred. `sync-job` skips note items; supporting
   them needs an HTML→Tana-Paste converter (Notero's `html-to-notion` is the
   reference).
