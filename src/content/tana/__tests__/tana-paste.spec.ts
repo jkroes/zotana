@@ -43,15 +43,13 @@ describe('toTanaPaste', () => {
     expect(paste).toContain('  - Date:: [[date:2017-12-01]]');
   });
 
-  it('wraps url-typed values as a [url](url) markdown link', () => {
+  it('emits url-typed values as plain text (user converts URLs in Tana)', () => {
     const paste = toTanaPaste(
       node([
         { name: 'DOI', id: 'd', type: 'url', value: 'https://doi.org/10.x' },
       ]),
     );
-    expect(paste).toContain(
-      '  - DOI:: [https://doi.org/10.x](https://doi.org/10.x)',
-    );
+    expect(paste).toContain('  - DOI:: https://doi.org/10.x');
   });
 
   it('renders an optionList field as one indented plain-text node per value', () => {

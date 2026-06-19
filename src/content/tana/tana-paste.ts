@@ -53,14 +53,11 @@ function scalarValueText(field: {
   switch (field.type) {
     case 'date':
       return `[[date:${field.value}]]`;
-    case 'url':
-      // Emit a markdown link [url](url) so paste renders a clickable URL node.
-      // Tana only renders markdown links on import (paste), not via the API — so
-      // the update path sends the raw URL (plain text) and the user re-runs Tana's
-      // "Iterate and convert URLs to URL nodes" to re-link changed URLs (see README).
-      return `[${field.value}](${field.value})`;
     default:
-      // plain, number, options, and item (already a markdown link) pass through.
+      // url and item are emitted as raw text (markdown-link rendering on import
+      // proved unreliable); the user converts them with Tana's "Iterate and
+      // convert URLs to URL nodes" command (see README). plain/number/options
+      // pass through unchanged too.
       return field.value;
   }
 }

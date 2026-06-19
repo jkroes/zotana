@@ -30,7 +30,6 @@ const TAG = {
   reference: 'tag-ref',
   Person: 'tag-person',
   Organization: 'tag-org',
-  quote: 'tag-quote',
 };
 
 const FIELD = {
@@ -47,7 +46,11 @@ const schema: ResolvedSchema = {
   tagId: TAG.reference,
   tagName: 'reference',
   entityTagIds: { Person: TAG.Person, Organization: TAG.Organization },
-  quoteTagId: TAG.quote,
+  annotationTags: {
+    highlight: { tagId: 'tag-highlight', annotationFieldId: 'fid-hl' },
+    comment: { tagId: 'tag-comment', annotationFieldId: 'fid-cm' },
+    image: { tagId: 'tag-image', annotationFieldId: 'fid-im' },
+  },
   fields: {
     item: FIELD.item,
     doi: FIELD.doi,
@@ -89,7 +92,7 @@ const referenceNode: TanaReferenceNode = {
   tag: 'reference',
   tagId: TAG.reference,
   fields: [
-    { ...FIELD.item, type: 'item', value: '[zotero://x](zotero://x)' },
+    { ...FIELD.item, type: 'item', value: 'zotero://x' },
     { ...FIELD.doi, type: 'url', value: 'https://doi.org/10.x' },
     { ...FIELD.date, type: 'date', value: '2017-12-01' },
     { ...FIELD.itemType, type: 'options', value: 'Journal Article' },
@@ -148,6 +151,7 @@ describe('syncRegularItem — create path', () => {
       title: 'Vaswani, 2017',
       fields: expectedFieldSignatures,
       contentSig: 'test-content-sig',
+      createdAt: expect.any(Number),
       annotations: {},
     });
     expect(saveTanaTag).toHaveBeenCalledWith(item);
@@ -402,8 +406,67 @@ describe('syncRegularItem — update path', () => {
       title: 'Vaswani, 2017',
       fields: expectedFieldSignatures,
       contentSig: 'test-content-sig',
+      createdAt: expect.any(Number),
       annotations: {},
     });
+  });
+
+  it('keeps a just-created node that search has not indexed yet (within grace)', async () => {
+    const item = createZoteroItemMock();
+    const client = createClientMock();
+    mockedGetTanaSyncData.mockReturnValue({
+      nodeId: 'node1',
+      title: 'Old',
+      fields: {},
+      // Created moments ago: a search miss is index lag, not a gone node.
+      createdAt: Date.now(),
+      annotations: {},
+    });
+    // Reference search misses (not indexed yet); Person resolves so no entity import.
+    mockSearchByType(client, {
+      [TAG.reference]: [],
+      [TAG.Person]: [{ id: 'person1', name: 'Ashish Vaswani', inTrash: false }],
+    });
+
+    await syncRegularItem(item, makeParams(client));
+
+    // updated in place on the stored node, NOT rebuilt
+    expect(client.update).toHaveBeenCalledWith('node1', {
+      name: 'Vaswani, 2017',
+    });
+    expect(client.import).not.toHaveBeenCalled();
+    expect(mockedSaveTanaSyncData).toHaveBeenCalledWith(
+      item,
+      expect.objectContaining({
+        nodeId: 'node1',
+        createdAt: expect.any(Number),
+      }),
+    );
+  });
+
+  it('rebuilds a search-missing node once its create time is past the grace window', async () => {
+    const item = createZoteroItemMock();
+    const client = createClientMock();
+    mockedGetTanaSyncData.mockReturnValue({
+      nodeId: 'old-node',
+      title: 'Old',
+      fields: {},
+      // Created long ago: a search miss now means trashed/orphaned/purged.
+      createdAt: Date.now() - 5 * 60_000,
+      annotations: {},
+    });
+    mockSearchByType(client, { [TAG.reference]: [] });
+    client.import.mockResolvedValue({
+      createdNodes: [{ id: 'fresh-node', name: 'Vaswani, 2017' }],
+    });
+
+    await syncRegularItem(item, makeParams(client));
+
+    expect(client.import).toHaveBeenCalledWith(
+      'parent',
+      expect.stringContaining('#reference'),
+    );
+    expect(client.update).not.toHaveBeenCalled();
   });
 
   it('creates a missing entity node and references the new ID', async () => {
