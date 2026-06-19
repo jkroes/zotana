@@ -66,18 +66,18 @@ export function normalizeDate(sqlDate: string | undefined): string | null {
 }
 
 /**
- * zotero://select back-link as a `[url](url)` markdown link (clickable when pasted,
- * no alias — consistent with DOI/URL); the upsert key on the Zotero side. Handles
- * group libraries by deriving the group ID from the item's web URI (Zotero.Libraries
- * is not in the bundled type defs).
+ * zotero://select back-link (the upsert key on the Zotero side), emitted as plain
+ * text — like every other URL field, it's left un-linked for the user to convert
+ * with Tana's "Iterate and convert URLs to URL nodes" command (markdown-link
+ * rendering on import proved unreliable). Handles group libraries by deriving the
+ * group ID from the item's web URI (Zotero.Libraries is not in the bundled types).
  */
 function zoteroLink(item: Zotero.Item): string {
   const uri = Zotero.URI.getItemURI(item);
   const groupMatch = uri.match(/\/groups\/(\d+)\/items\//);
-  const selectURL = groupMatch
+  return groupMatch
     ? `zotero://select/groups/${groupMatch[1]}/items/${item.key}`
     : `zotero://select/library/items/${item.key}`;
-  return `[${selectURL}](${selectURL})`;
 }
 
 export function buildReference(

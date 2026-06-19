@@ -57,12 +57,11 @@ sync-on-modify.
 
 ## Known limitations
 
-- **Clickable URL fields (DOI, URL, Item).** Tana only renders a clickable link
-  from imported content (on create). The plugin emits `[url](url)` so newly-synced
-  items get clickable URL nodes. But on a later re-sync that **changes** one of
-  these fields, the new value is written through the Local API as **plain text**
-  (Tana doesn't render links via the API). To re-link them, run Tana's
-  **`Iterate and convert URLs to URL nodes`** command on your `#reference` items.
+- **URL fields are plain text (DOI, URL, Item, annotation back-links).** Tana's
+  clickable-link rendering on import proved unreliable — some URL fields/nodes
+  rendered as links and others didn't — so the plugin writes every URL as **plain
+  text**, on both create and update. To make them clickable, run Tana's
+  **`Iterate and convert URLs to URL nodes`** command on your synced items.
 
 ## Development
 

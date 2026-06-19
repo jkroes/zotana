@@ -62,8 +62,8 @@ describe('syncAnnotations — create', () => {
     expect(client.import).toHaveBeenCalledWith('ref-node', expect.any(String));
     const paste = client.import.mock.calls[0]?.[1] as string;
     expect(paste).toContain('#[[^highlight-tag]]');
-    // back-link written as a clickable markdown link under the Annotation field
-    expect(paste).toContain('[[^hl-field]]:: [' + highlight.link + ']');
+    // back-link written as plain text under the Annotation field
+    expect(paste).toContain('[[^hl-field]]:: ' + highlight.link);
     expect(client.update).toHaveBeenCalledWith('new-node', {
       name: 'A highlighted sentence',
       description: 'with a comment',

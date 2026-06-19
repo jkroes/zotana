@@ -70,13 +70,13 @@ async function createAnnotationNode(
   referenceNodeId: string,
   annotation: AnnotationNode,
 ): Promise<string> {
-  // Carry the back-link in the paste (as a markdown link, so it imports as a
-  // clickable URL node) under the tag's Annotation field. The link is stable per
-  // annotation, so it's only ever written here — never on the update path.
+  // Carry the back-link in the paste under the tag's Annotation field, as plain
+  // text (like every URL field — the user converts URLs to nodes in Tana). The
+  // link is stable per annotation, so it's only ever written here.
   const paste = [
     '%%tana%%',
     `- ${PLACEHOLDER_NAME} #[[^${annotation.tagId}]]`,
-    `  - [[^${annotation.annotationFieldId}]]:: [${annotation.link}](${annotation.link})`,
+    `  - [[^${annotation.annotationFieldId}]]:: ${annotation.link}`,
   ].join('\n');
   const { createdNodes } = await client.import(referenceNodeId, paste);
 

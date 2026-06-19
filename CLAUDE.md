@@ -73,8 +73,10 @@ Source lives under `src/content/`.
   blank configured name to the catalog default.
 - **`tana/schema.ts`** — `ensureSchema(client, config, {workspaceId,
 optionSeeds})`: finds the tag by name (creates it + `#Person` /
-  `#Organization` / `#quote` if missing), parses `/tags/{id}/schema` markdown
-  for name→id, creates missing **enabled** fields with their catalog `dataType`,
+  `#Organization` and the annotation tags `#highlight` / `#comment` / `#image`,
+  each with an `Annotation` back-link field, if missing), parses
+  `/tags/{id}/schema` markdown for name→id, creates missing **enabled** fields
+  with their catalog `dataType`,
   and seed-then-trashes the placeholder option needed to create empty Options
   fields. Returns `ResolvedSchema`. Run as a sync preflight, so the first sync
   auto-bootstraps.
@@ -101,7 +103,9 @@ enabled}] }`, persisted as JSON in the `schemaConfig` pref. `mergeSchemaConfig`
   lives here.
 - **`sync/sync-config.ts`** — shared `getCitationFormat` / `getTitleFormat` pref
   readers (split out so `content-signature` doesn't import `sync-job`).
-- **`sync/sync-annotations.ts`** — per-annotation upsert into `#quote` nodes.
+- **`sync/sync-annotations.ts`** — per-annotation upsert into `#highlight` /
+  `#comment` / `#image` nodes, each carrying a `zotero://open-pdf` back-link in its
+  `Annotation` field (`sync/annotations.ts` normalizes Zotero annotations to these).
 - **`tana/reference-builder.ts`, `tana/entities.ts`, `tana/tana-paste.ts`** —
   item → reference node (base-field reads, six title formats, live CSL via
   `Zotero.QuickCopy`) → creator bucketing/routing → Tana Paste serialization.
@@ -180,10 +184,11 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
 
 ## Known limitations
 
-- **Clickable URL fields (DOI / URL / Item)** render as links only from imported
-  content (on create). A later re-sync that changes the field writes plain text;
-  re-link with Tana's `Iterate and convert URLs to URL nodes` command. (Also in
-  README.)
+- **URL fields (DOI / URL / Item / annotation back-links) are always written as
+  plain text** — on create and on update alike. Markdown-link rendering on import
+  proved unreliable (clickable for some fields/nodes, not others), so Zotana emits
+  raw URLs and the user converts them with Tana's `Iterate and convert URLs to URL
+nodes` command. (Also in README.)
 - **Entity resolution** substring-searches with `limit: 50` and matches the name
   exactly client-side; an exact match beyond the first 50 hits is missed (rare).
 
@@ -194,20 +199,21 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   field, **Test D** (both trashed _and_ purged nodes rebuild; attachment repoints),
   **warn-and-skip** (referenced value node preserved; releases when the backlink is
   removed), **field-clear** (value node cleared + node name re-renders),
-  **URL-render** (clickable on create, plain text on update), and **annotation
-  add/delete deltas**. Caveat: `linksTo` only indexes a reference made in the Tana
-  UI, not one created via the API/Inbox. Still unwalked: from-scratch schema
-  bootstrap, non-author-date title formats, group-library items, date granularity.
+  **URL-render** (markdown-link clickability proved unreliable across fields/nodes
+  → downgraded to plain text everywhere; see Known limitations), and **annotation
+  add/delete deltas** + the new annotation tags/back-links. Caveat: `linksTo` only
+  indexes a reference made in the Tana UI, not one created via the API/Inbox. Still
+  unwalked: non-author-date title formats, group-library items, date granularity.
 - **Duplicate-ProgressWindow fix (branch `fix/duplicate-sync-progresswindow`, not
   merged):** editing a title makes Zotero's File Renaming auto-rename the linked
   PDF, firing a 2nd `item.modify` mid-sync that raced the contentSig persist and
   started a duplicate sync. Fixed with an in-flight guard in `sync-manager.ts`
   (`syncingItemIDs`) + `skipNotifier` on `saveTanaSyncData`'s update saveTx.
-- **Annotation tags + back-link (implemented, pending live bootstrap test):**
+- **Annotation tags + back-link (implemented, bootstrap live-verified 2026-06-19):**
   highlight→`#highlight`, note→`#comment`, image→`#image`, each with an `Annotation`
-  URL field holding a `zotero://open-pdf/...?annotation=KEY` deep link (written in
-  the create paste, clickable, never rewritten). Replaces the old bare `#quote` /
-  untagged-children model.
+  URL field holding a `zotero://open-pdf/...?annotation=KEY` deep link (plain text,
+  written once in the create paste, never rewritten). Replaces the old bare
+  `#quote` / untagged-children model.
 - **Rich-text note syncing** — deferred. `sync-job` skips note items; supporting
   them needs an HTML→Tana-Paste converter (Notero's `html-to-notion` is the
   reference).

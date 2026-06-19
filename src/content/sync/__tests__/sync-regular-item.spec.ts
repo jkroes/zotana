@@ -92,7 +92,7 @@ const referenceNode: TanaReferenceNode = {
   tag: 'reference',
   tagId: TAG.reference,
   fields: [
-    { ...FIELD.item, type: 'item', value: '[zotero://x](zotero://x)' },
+    { ...FIELD.item, type: 'item', value: 'zotero://x' },
     { ...FIELD.doi, type: 'url', value: 'https://doi.org/10.x' },
     { ...FIELD.date, type: 'date', value: '2017-12-01' },
     { ...FIELD.itemType, type: 'options', value: 'Journal Article' },
