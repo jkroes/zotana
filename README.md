@@ -156,6 +156,9 @@ first avoids that, since Tana preserves the tag for every node already using it.
   without notifying Zotero's UI (deliberately — that notification would re-trigger
   a sync). The attachment is saved correctly, but Zotero's item tree won't show it
   until you **collapse and expand the item** (or reselect it). Purely cosmetic.
+- **Standalone notes are not synced.** Zotana syncs regular items (and their PDF/
+  EPUB annotations); standalone Zotero note items are skipped. An item's own
+  abstract still syncs as a field — only note _items_ are out of scope.
 
 ## Development
 
@@ -182,16 +185,6 @@ git tag v0.1.0 && git push origin v0.1.0
 The [`Release` workflow](.github/workflows/release.yml) builds the `.xpi`,
 attaches it to a GitHub Release for that tag, and publishes the auto-update
 manifest under the `release` tag.
-
-## Status
-
-Beta. The full v0.2 sync path has been live-verified end to end against real
-Zotero and Tana — schema bootstrap, create, in-place per-field update, batch
-sync, sync-on-modify no-op skip, deleted/purged-node rebuild, warn-and-skip,
-field clears, all six title formats, group-library items, date granularity, and
-annotation syncing. The main remaining gap is **note syncing**, which is not yet
-implemented (`#reference` items only). See `CLAUDE.md` for the architecture and
-the open-work list.
 
 ## Credits
 

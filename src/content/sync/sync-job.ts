@@ -139,8 +139,8 @@ async function syncItems(
 
     try {
       if (item.isNote()) {
-        // Note syncing is not yet implemented for Tana (see CLAUDE.md "Open work").
-        logger.debug('Skipping note item (note syncing not yet supported)');
+        // Standalone notes are out of scope (see CLAUDE.md "Known limitations").
+        logger.debug('Skipping note item (note syncing not supported)');
       } else {
         const referencedFields = await syncRegularItem(item, params);
         if (referencedFields.length)
