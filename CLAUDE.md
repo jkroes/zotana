@@ -16,12 +16,6 @@ pnpm typecheck     # tsc
 pnpm create-xpi    # repackage build/ into xpi/ (build only compiles to build/)
 ```
 
-Build note: the chokidar asset-copy step can throw `EMFILE: too many open
-files` **after** esbuild has finished (Node has no `fsevents` prebuilt → falls
-back to `fs.watch`; worse under a restricted/sandbox filesystem). The JS bundles
-are still produced, so `pnpm create-xpi` repackages a correct XPI even when the
-build command exits non-zero on that step.
-
 ## Architecture
 
 Source lives under `src/content/`.
@@ -160,11 +154,6 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   against a real Zotero + Tana. The REST `readNode` markdown **does** carry the
   `<!-- node-id -->` comments the warn-and-skip parser needs (previously unproven).
   Still unwalked live: Test D (purged-node rebuild) and the URL-render path.
-- **`pnpm build` / `pnpm start` EMFILE on this machine:** the chokidar asset-copy
-  step (`scripts/utils/copy-assets.mts`) blows the macOS `fs.watch` limit and never
-  copies `locale/` + `*.xhtml` + `*.css` into `build/` — so a dev load shows blank
-  labels and an empty prefs pane. Until copy-assets is de-chokidar'd, copy those
-  assets in manually after a build. `pnpm create-xpi` is unaffected.
 - **Rich-text note syncing** — deferred. `sync-job` skips note items; supporting
   them needs an HTML→Tana-Paste converter (Notero's `html-to-notion` is the
   reference).

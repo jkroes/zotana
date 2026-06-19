@@ -42,10 +42,14 @@ function createWatcher(persistent: boolean): {
   return { close, ready, watcher };
 }
 
-export function copyAssets(): Promise<void> {
-  const { close, ready } = createWatcher(false);
-
-  return ready.then(close);
+export async function copyAssets(): Promise<void> {
+  // One-off copy: walk srcDir and copy directly. We deliberately avoid chokidar
+  // here — a non-persistent watcher still opens an fs.watch handle per directory
+  // just to enumerate once, which blows the macOS EMFILE limit (no fsevents
+  // prebuilt → fs.watch fallback). fs-extra's recursive copy needs no watchers.
+  await fs.copy(srcDir, buildDir, {
+    filter: (srcPath) => !IGNORE_PATTERNS.some((pattern) => pattern.test(srcPath)),
+  });
 }
 
 export async function copyAndWatchAssets(): Promise<CleanupFunction> {
