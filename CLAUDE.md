@@ -16,6 +16,11 @@ pnpm typecheck     # tsc
 pnpm create-xpi    # repackage build/ into xpi/ (build only compiles to build/)
 ```
 
+`vp check` = format + lint + types (whole repo); `vp run verify` adds tests. The
+`check`/`verify` scripts pass `--no-error-on-unmatched-pattern` so `pnpm check
+<path>` tolerates a non-lintable path (e.g. a `.md`); bare `vp check <path>`
+without that flag errors with "Linting could not start / No files found to lint".
+
 Release workflow (green-first, then tag; never move a published version tag) is
 in `docs/RELEASING.md`.
 
