@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { CATALOG, DEFAULT_TAG_NAME } from '../../tana/constants';
+import {
+  ANNOTATION_TAG_NAMES,
+  CATALOG,
+  DEFAULT_TAG_NAME,
+  ENTITY_TAG_NAMES,
+} from '../../tana/constants';
 import { defaultSchemaConfig, mergeSchemaConfig } from '../schema-config';
 
 describe('defaultSchemaConfig', () => {
@@ -10,6 +15,12 @@ describe('defaultSchemaConfig', () => {
     expect(config.fields).toHaveLength(CATALOG.length);
     expect(config.fields.every((field) => field.enabled)).toBe(true);
     expect(config.fields.every((field) => field.name === '')).toBe(true);
+  });
+
+  it('defaults the entity and annotation tag names', () => {
+    const config = defaultSchemaConfig();
+    expect(config.entityTags).toEqual(ENTITY_TAG_NAMES);
+    expect(config.annotationTags).toEqual(ANNOTATION_TAG_NAMES);
   });
 });
 
@@ -37,6 +48,28 @@ describe('mergeSchemaConfig', () => {
       enabled: true,
     });
     expect(abstract?.enabled).toBe(false);
+  });
+
+  it('keeps stored entity/annotation tag names and fills blanks with defaults', () => {
+    const config = mergeSchemaConfig({
+      tagName: 'zotero',
+      entityTags: { Person: 'Author', Organization: '  ' },
+      annotationTags: { highlight: 'Quote' },
+      fields: [],
+    });
+
+    // non-blank stored name kept; blank/missing fall back to the default
+    expect(config.entityTags.Person).toBe('Author');
+    expect(config.entityTags.Organization).toBe(ENTITY_TAG_NAMES.Organization);
+    expect(config.annotationTags.highlight).toBe('Quote');
+    expect(config.annotationTags.comment).toBe(ANNOTATION_TAG_NAMES.comment);
+    expect(config.annotationTags.image).toBe(ANNOTATION_TAG_NAMES.image);
+  });
+
+  it('defaults entity/annotation tag names when the stored config omits them', () => {
+    const config = mergeSchemaConfig({ tagName: 'zotero', fields: [] });
+    expect(config.entityTags).toEqual(ENTITY_TAG_NAMES);
+    expect(config.annotationTags).toEqual(ANNOTATION_TAG_NAMES);
   });
 
   it('fills in catalog fields the stored config is missing, in catalog order', () => {

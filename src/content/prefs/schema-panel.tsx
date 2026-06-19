@@ -2,21 +2,45 @@ import React from 'react';
 
 import { TanaClient, type Workspace } from '../tana/client';
 import {
+  ANNOTATION_TAG_KEYS,
+  ANNOTATION_TAG_NAMES,
   CATALOG_BY_KEY,
   DEFAULT_TAG_NAME,
+  ENTITY_TAG_KEYS,
+  ENTITY_TAG_NAMES,
   effectiveFieldName,
+  type AnnotationKind,
+  type EntityTag,
   type TanaDataType,
 } from '../tana/constants';
 import { ensureSchema } from '../tana/schema';
 import { logger } from '../utils';
 
 import {
+  defaultSchemaConfig,
   getSchemaConfig,
   setSchemaConfig,
   type FieldConfig,
   type SchemaConfig,
 } from './schema-config';
-import { ZotanaPref, getZotanaPref, setZotanaPref } from './zotana-pref';
+import {
+  PageTitleFormat,
+  ZotanaPref,
+  getZotanaPref,
+  setZotanaPref,
+} from './zotana-pref';
+
+/** One selectable entry in the reference-node-title dropdown. */
+export type TitleFormatOption = {
+  value: PageTitleFormat;
+  label: string;
+  disabled: boolean;
+};
+
+type Props = {
+  /** Resolved (localized) options for the reference-node-title dropdown. */
+  titleFormatOptions: TitleFormatOption[];
+};
 
 type StatusKind = 'idle' | 'busy' | 'ok' | 'error';
 
@@ -24,6 +48,7 @@ type State = {
   config: SchemaConfig;
   workspaces: Workspace[];
   workspaceId: string;
+  titleFormat: PageTitleFormat;
   statusKind: StatusKind;
   statusMessage: string;
 };
@@ -54,13 +79,16 @@ const STATUS_COLOR: Record<StatusKind, string> = {
  * in Tana. Field NAMES are the source of truth; IDs are resolved (or created) at
  * sync time, so renaming here (and in Tana) keeps the link working.
  */
-export class SchemaPanel extends React.Component<unknown, State> {
-  public constructor(props: unknown) {
+export class SchemaPanel extends React.Component<Props, State> {
+  public constructor(props: Props) {
     super(props);
     this.state = {
       config: getSchemaConfig(),
       workspaces: [],
       workspaceId: getZotanaPref(ZotanaPref.tanaWorkspaceId) ?? '',
+      titleFormat:
+        getZotanaPref(ZotanaPref.pageTitleFormat) ??
+        PageTitleFormat.itemAuthorDateCitation,
       statusKind: 'idle',
       statusMessage: '',
     };
@@ -109,10 +137,27 @@ export class SchemaPanel extends React.Component<unknown, State> {
     this.setState({ workspaceId });
   };
 
-  private handleTagNameChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
+  private updateEntityTag(key: EntityTag, name: string): void {
+    this.persistConfig({
+      ...this.state.config,
+      entityTags: { ...this.state.config.entityTags, [key]: name },
+    });
+  }
+
+  private updateAnnotationTag(key: AnnotationKind, name: string): void {
+    this.persistConfig({
+      ...this.state.config,
+      annotationTags: { ...this.state.config.annotationTags, [key]: name },
+    });
+  }
+
+  private handleTitleFormatChange = (
+    event: React.ChangeEvent<HTMLSelectElement>,
   ): void => {
-    this.persistConfig({ ...this.state.config, tagName: event.target.value });
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const titleFormat = event.target.value as PageTitleFormat;
+    setZotanaPref(ZotanaPref.pageTitleFormat, titleFormat);
+    this.setState({ titleFormat });
   };
 
   private updateField(key: string, patch: Partial<FieldConfig>): void {
@@ -160,9 +205,38 @@ export class SchemaPanel extends React.Component<unknown, State> {
     this.setState({ statusKind, statusMessage });
   }
 
+  /** A labelled `#tag` name input (shared by the reference + aux tag rows). */
+  private renderTagNameInput(
+    id: string,
+    label: string,
+    value: string,
+    placeholder: string,
+    onChange: (name: string) => void,
+  ): React.ReactNode {
+    return (
+      <div className="zotana-margin-block-start" key={id}>
+        <label htmlFor={id}>{label}: </label>
+        <span aria-hidden="true">#</span>
+        <input
+          id={id}
+          type="text"
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    );
+  }
+
   public render(): React.ReactNode {
-    const { config, workspaces, workspaceId, statusKind, statusMessage } =
-      this.state;
+    const {
+      config,
+      workspaces,
+      workspaceId,
+      titleFormat,
+      statusKind,
+      statusMessage,
+    } = this.state;
 
     return (
       <div className="zotana-schema-panel">
@@ -182,15 +256,53 @@ export class SchemaPanel extends React.Component<unknown, State> {
           </select>
         </div>
 
+        {/* Names of every other supertag Zotana creates. */}
+        {ENTITY_TAG_KEYS.map((key) =>
+          this.renderTagNameInput(
+            `zotana-schema-entityTag-${key}`,
+            `${capitalize(key)} tag name`,
+            config.entityTags[key],
+            ENTITY_TAG_NAMES[key],
+            (name) => this.updateEntityTag(key, name),
+          ),
+        )}
+        {ANNOTATION_TAG_KEYS.map((key) =>
+          this.renderTagNameInput(
+            `zotana-schema-annotationTag-${key}`,
+            `${capitalize(key)} tag name`,
+            config.annotationTags[key],
+            ANNOTATION_TAG_NAMES[key],
+            (name) => this.updateAnnotationTag(key, name),
+          ),
+        )}
+
+        {this.renderTagNameInput(
+          'zotana-schema-tagName',
+          'Reference tag name',
+          config.tagName,
+          DEFAULT_TAG_NAME,
+          (name) => this.persistConfig({ ...this.state.config, tagName: name }),
+        )}
+
         <div className="zotana-margin-block-start">
-          <label htmlFor="zotana-schema-tagName">Reference tag name: </label>
-          <span aria-hidden="true">#</span>
-          <input
-            id="zotana-schema-tagName"
-            type="text"
-            value={config.tagName}
-            onChange={this.handleTagNameChange}
-          />
+          <label htmlFor="zotana-schema-titleFormat">
+            Reference node title:{' '}
+          </label>
+          <select
+            id="zotana-schema-titleFormat"
+            value={titleFormat}
+            onChange={this.handleTitleFormatChange}
+          >
+            {this.props.titleFormatOptions.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <table className="zotana-schema-table zotana-margin-block-start">
@@ -251,10 +363,37 @@ export class SchemaPanel extends React.Component<unknown, State> {
   }
 }
 
-/** Normalize the tag name and trim field names; blank names stay blank. */
+/** Trim each tag name, falling back to its default when left blank. */
+function normalizeTagNames<K extends string>(
+  keys: readonly K[],
+  names: Record<K, string>,
+  fallback: Record<K, string>,
+): Record<K, string> {
+  const result = { ...names };
+  for (const key of keys) {
+    result[key] = result[key].trim() || fallback[key];
+  }
+  return result;
+}
+
+/**
+ * Normalize tag names (blank → the catalog/constant default) and trim field
+ * names (blank field names stay blank, resolved to the default at sync time).
+ */
 function normalizeConfig(config: SchemaConfig): SchemaConfig {
+  const defaults = defaultSchemaConfig();
   return {
     tagName: config.tagName.trim() || DEFAULT_TAG_NAME,
+    entityTags: normalizeTagNames(
+      ENTITY_TAG_KEYS,
+      config.entityTags,
+      defaults.entityTags,
+    ),
+    annotationTags: normalizeTagNames(
+      ANNOTATION_TAG_KEYS,
+      config.annotationTags,
+      defaults.annotationTags,
+    ),
     fields: config.fields.map((field) => ({
       ...field,
       name: field.name.trim(),
@@ -276,4 +415,9 @@ function zoteroItemTypeNames(): string[] {
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+/** Capitalize the first letter (for the aux tag labels, e.g. "highlight"). */
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

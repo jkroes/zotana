@@ -198,16 +198,22 @@ export const ITEM_FIELD_KEY: FieldKey = 'item';
 /** Default name for the reference supertag (user-overridable in preferences). */
 export const DEFAULT_TAG_NAME = 'zotero';
 
-/** Fixed names for the auxiliary tags Zotana creates/links. Not user-renamable. */
+/** Default names for the entity tags (user-overridable in preferences). */
 export const ENTITY_TAG_NAMES: Record<EntityTag, string> = {
   Person: 'Person',
   Organization: 'Organization',
 };
 
+/** Entity tag keys in display order (the source of truth for iteration). */
+export const ENTITY_TAG_KEYS = [
+  'Person',
+  'Organization',
+] as const satisfies readonly EntityTag[];
+
 /**
  * Supertags applied to synced annotation nodes, by Zotero annotation kind:
  * highlight/underline → `highlight`, note/text → `comment`, image → `image`.
- * Fixed names (like the entity tags), not user-renamable.
+ * Default names, user-overridable in preferences.
  */
 export const ANNOTATION_TAG_NAMES = {
   highlight: 'highlight',
@@ -216,6 +222,13 @@ export const ANNOTATION_TAG_NAMES = {
 } as const;
 
 export type AnnotationKind = keyof typeof ANNOTATION_TAG_NAMES;
+
+/** Annotation tag keys in display order (the source of truth for iteration). */
+export const ANNOTATION_TAG_KEYS = [
+  'highlight',
+  'comment',
+  'image',
+] as const satisfies readonly AnnotationKind[];
 
 /**
  * URL field created on every annotation tag, holding a `zotero://open-pdf` deep

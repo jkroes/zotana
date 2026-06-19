@@ -24,6 +24,60 @@ pointing at the `#reference` node itself always survives, but a link pointing at
 specific field _value_ node would break when that value changes — Zotana detects
 that case, leaves the field untouched, and reports it as a sync warning.
 
+### Annotations
+
+An item's PDF/EPUB annotations sync as child nodes under its `#reference` node,
+each keyed by its Zotero annotation key so re-syncs update them in place:
+
+- **Highlights / underlines** → `#highlight` — the selected text is the node
+  name; any comment becomes the node's description.
+- **Notes / text** → `#comment` — the typed note is the node name.
+- **Image annotations** → `#image` — a **text placeholder** (`Image annotation
+(p. N)`); the actual cropped image is **not** synced, because the Tana Local
+  API has no way to upload image data. Any comment becomes the description.
+- **Ink** annotations are skipped (no text content).
+
+Every annotation node also carries an `Annotation` field with a
+`zotero://open-pdf` back-link that jumps straight to the annotation in the PDF
+(plain text, like all URL fields — see Known limitations).
+
+**Three `Annotation` fields, and merging them:** schema creation gives each of
+`#highlight`, `#comment`, and `#image` its **own** `Annotation` field — Tana's
+Local API can only create a field on a tag, never reuse one across tags, so you
+get three. You can safely **merge them into a single `Annotation` field** in
+Tana: Zotana finds the field by its name on each tag every sync, so as long as
+all three tags still have a field named `Annotation` (kept as a URL field) after
+the merge, annotation syncing keeps working. Don't rename it or remove it from
+any of the three tags — the next sync would recreate a fresh `Annotation` field
+on whichever tag is missing one, bringing the duplicates back.
+
+**Replacing an image placeholder with the real image:** you can paste the image
+directly onto the placeholder node in Tana and it will survive every future
+sync. Zotana never reads the live node content — it only rewrites a node when the
+text it _would_ produce differs from what it last wrote, and an image
+annotation's placeholder text (derived from its page) never changes. Two rules:
+edit the **existing** node in place (deleting it and creating a new image node
+loses the id Zotana tracks, so it recreates the placeholder), and don't manually
+re-label the PDF's pages in Zotero (that changes the placeholder text and would
+overwrite your image on the next sync).
+
+### What gets overwritten vs. left alone
+
+- **The `#reference` node and annotation nodes keep their identity** across
+  re-syncs — links pointing _at these nodes_ always survive.
+- **Field values are rewritten only when the source field changes** in Zotero;
+  unchanged fields are never touched.
+- **A value node that something else links to is left alone** and reported as a
+  sync warning, rather than being replaced.
+- **Manual edits to a synced field's value** will be overwritten the next time
+  that field changes in Zotero — Zotana is the source of truth for fields it
+  syncs. Edits to _non-synced_ fields, and content you add as **separate child
+  nodes**, are never touched.
+- **Deleting the hidden "Tana" attachment disconnects the item** — automatic
+  sync-on-modify only _updates_ items that already have a Tana node, so removing
+  that attachment stops the link without recreating the node. Run **Sync to
+  Tana** on the item to rebuild it.
+
 ## Requirements
 
 - Zotero 7+ (running)
@@ -46,14 +100,49 @@ In Zotero → Settings → Zotana:
 2. **Parent Node ID** — paste the ID of the Tana node where new reference nodes
    are created (e.g. Library).
 3. **Local API URL** — optional; defaults to `http://localhost:8262`.
-4. In the **schema** panel, pick the workspace, keep or rename the reference tag
-   and fields (blank field names use their defaults), choose which fields sync,
-   and click **Create / refresh schema in Tana** to create the tag + fields.
-5. Enable the collections you want to sync, and choose the reference node title
-   format.
+4. Enable the collections you want to sync, and tick **Sync when items are
+   modified** to turn on automatic re-sync (it's in the same Sync Preferences
+   group; leave it off to sync only on demand or when an item is added to a
+   watched collection).
+5. In the **Tana Schema** panel (at the bottom): pick the workspace; name every
+   supertag Zotana creates (Person / Organization / highlight / comment / image,
+   and the reference tag); choose the **reference node title** format; keep or
+   rename the fields (blank field names use their defaults) and choose which sync;
+   then click **Create / refresh schema in Tana** to create the tags + fields.
 
-Then right-click a collection or items → **Sync to Tana**, or rely on automatic
-sync-on-modify.
+Then right-click a collection → **Sync Items to Tana**, or right-click items →
+**Sync to Tana**, or rely on automatic sync-on-modify.
+
+### Renaming tags & fields vs. Create / refresh
+
+Zotana links to Tana **by name**, and it can only **create or find** a tag/field
+— it never renames one that already exists in Tana. Keep that distinction in
+mind:
+
+- **Create / refresh schema** makes sure every tag and enabled field _exists_ in
+  Tana, creating any that are missing. You need it for **first-time setup**, after
+  **enabling a new field** (or adding a tag) you want created, or to **validate**
+  the connection up front. You don't strictly have to press it — Zotana runs the
+  same check automatically before every sync — but the button does it on demand
+  and shows a status.
+- **Renaming** keeps an existing tag/field and its data. Because Zotana matches by
+  the configured name, a name that matches a tag/field in Tana is **reused**
+  (identity, values, and inbound links preserved); a name that doesn't match makes
+  Zotana **create a new one**, orphaning the old. So to rename without losing
+  anything, do it in **both** places: rename it in **Tana's UI** (Tana keeps the
+  underlying tag/field, just changes its name) **and** set the **same** name in
+  the Zotana schema panel. Renaming in only one place produces a duplicate.
+
+| Goal                                           | Do this                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| Add the schema / a newly-enabled field to Tana | **Create / refresh** (or just sync — it runs the same check) |
+| Rename a tag/field and keep its data           | Rename in **Tana** _and_ set the matching name in Zotana     |
+| Change which fields sync, field order, etc.    | Edit in Zotana; the next sync applies it                     |
+
+For the **reference and entity tags** specifically, existing nodes are updated in
+place and keep whatever tag they were created with — so a Zotana-only rename leaves
+old nodes on the old tag and new nodes on the new one (a mix). Renaming in Tana
+first avoids that, since Tana preserves the tag for every node already using it.
 
 ## Known limitations
 
@@ -62,6 +151,11 @@ sync-on-modify.
   rendered as links and others didn't — so the plugin writes every URL as **plain
   text**, on both create and update. To make them clickable, run Tana's
   **`Iterate and convert URLs to URL nodes`** command on your synced items.
+- **The hidden "Tana" attachment may not appear until you refresh the row.** When
+  an item is first synced, Zotana writes its sync-tracking "Tana" child attachment
+  without notifying Zotero's UI (deliberately — that notification would re-trigger
+  a sync). The attachment is saved correctly, but Zotero's item tree won't show it
+  until you **collapse and expand the item** (or reselect it). Purely cosmetic.
 
 ## Development
 
@@ -91,11 +185,13 @@ manifest under the `release` tag.
 
 ## Status
 
-Alpha. The mapping and sync engine are ported and unit-tested, and the core
-write path (import, rename, field updates, schema creation) is validated against
-a running Local API server. What remains is a full end-to-end pass in Zotero —
-creating the schema and syncing items live — plus note syncing, which is not yet
-implemented. See `CLAUDE.md` for the architecture and the open-work list.
+Beta. The full v0.2 sync path has been live-verified end to end against real
+Zotero and Tana — schema bootstrap, create, in-place per-field update, batch
+sync, sync-on-modify no-op skip, deleted/purged-node rebuild, warn-and-skip,
+field clears, all six title formats, group-library items, date granularity, and
+annotation syncing. The main remaining gap is **note syncing**, which is not yet
+implemented (`#reference` items only). See `CLAUDE.md` for the architecture and
+the open-work list.
 
 ## Credits
 

@@ -13,9 +13,7 @@ import type { SchemaConfig } from '../prefs/schema-config';
 import { TanaClient } from './client';
 import {
   ANNOTATION_FIELD_NAME,
-  ANNOTATION_TAG_NAMES,
   CATALOG_BY_KEY,
-  ENTITY_TAG_NAMES,
   effectiveFieldName,
   type AnnotationKind,
   type CatalogEntry,
@@ -43,6 +41,8 @@ export type ResolvedSchema = {
   tagId: string;
   tagName: string;
   entityTagIds: Record<EntityTag, string>;
+  /** Entity supertag NAMES (for inline `[[Name #Tag]]` refs in the paste). */
+  entityTagNames: Record<EntityTag, string>;
   /** Annotation supertags (highlight/comment/image) + each one's link field id. */
   annotationTags: Record<AnnotationKind, ResolvedAnnotationTag>;
   /** Enabled fields only: catalog key -> resolved name + attribute id. */
@@ -101,8 +101,8 @@ export async function ensureSchema(
   // any instance field is created (they supply its sourceTagId).
   const tagId = await resolveOrCreateTag(config.tagName);
   const entityTagIds: Record<EntityTag, string> = {
-    Person: await resolveOrCreateTag(ENTITY_TAG_NAMES.Person),
-    Organization: await resolveOrCreateTag(ENTITY_TAG_NAMES.Organization),
+    Person: await resolveOrCreateTag(config.entityTags.Person),
+    Organization: await resolveOrCreateTag(config.entityTags.Organization),
   };
 
   const existingFields = parseTagSchemaFields(await client.getTagSchema(tagId));
@@ -161,9 +161,9 @@ export async function ensureSchema(
     return { tagId: annTagId, annotationFieldId };
   };
   const annotationTags: Record<AnnotationKind, ResolvedAnnotationTag> = {
-    highlight: await resolveAnnotationTag(ANNOTATION_TAG_NAMES.highlight),
-    comment: await resolveAnnotationTag(ANNOTATION_TAG_NAMES.comment),
-    image: await resolveAnnotationTag(ANNOTATION_TAG_NAMES.image),
+    highlight: await resolveAnnotationTag(config.annotationTags.highlight),
+    comment: await resolveAnnotationTag(config.annotationTags.comment),
+    image: await resolveAnnotationTag(config.annotationTags.image),
   };
 
   return {
@@ -171,6 +171,7 @@ export async function ensureSchema(
     tagId,
     tagName: config.tagName,
     entityTagIds,
+    entityTagNames: { ...config.entityTags },
     annotationTags,
     fields,
   };

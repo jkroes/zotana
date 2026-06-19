@@ -2,10 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import type { createRoot } from 'react-dom/client';
 
-import type { FluentMessageId } from '../../locale/fluent-types';
-import { createXULElement, getXULElementById, logger } from '../utils';
+import { logger } from '../utils';
 
-import { SchemaPanel } from './schema-panel';
+import { SchemaPanel, type TitleFormatOption } from './schema-panel';
 import { SyncConfigsTable } from './sync-configs-table';
 import {
   ZotanaPref,
@@ -17,48 +16,20 @@ import {
 
 type ReactDOMClient = typeof ReactDOM & { createRoot: typeof createRoot };
 
-type MenuItem = {
-  disabled?: boolean;
-  l10nId?: FluentMessageId;
-  label?: string;
-  value: string;
-};
-
-function setMenuItems(menuList: XUL.MenuListElement, items: MenuItem[]): void {
-  menuList.menupopup.replaceChildren();
-
-  items.forEach(({ disabled, l10nId, label, value }) => {
-    const item = createXULElement(document, 'menuitem');
-    item.value = value;
-    item.disabled = Boolean(disabled);
-    if (l10nId) {
-      document.l10n.setAttributes(item, l10nId);
-    } else {
-      item.label = label || value;
-    }
-    menuList.menupopup.append(item);
-  });
-}
-
 class Preferences {
-  private pageTitleFormatMenu!: XUL.MenuListElement;
-
   public async init(): Promise<void> {
     await Zotero.uiReadyPromise;
-
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    this.pageTitleFormatMenu = getXULElementById('zotana-pageTitleFormat')!;
 
     this.initTextPref('zotana-tanaToken', ZotanaPref.tanaToken);
     this.initTextPref('zotana-tanaParentNodeId', ZotanaPref.tanaParentNodeId);
     this.initTextPref('zotana-tanaBaseUrl', ZotanaPref.tanaBaseUrl);
 
-    await this.initPageTitleFormatMenu();
-    this.initSchemaPanel();
+    const titleFormatOptions = await this.buildTitleFormatOptions();
+    this.initSchemaPanel(titleFormatOptions);
     await this.initSyncConfigsTable();
   }
 
-  private initSchemaPanel(): void {
+  private initSchemaPanel(titleFormatOptions: TitleFormatOption[]): void {
     const container = document.getElementById('zotana-schemaPanel-container');
     if (!container) {
       logger.error('Failed to find schema panel container');
@@ -66,13 +37,15 @@ class Preferences {
     }
 
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    (ReactDOM as ReactDOMClient).createRoot(container).render(<SchemaPanel />);
+    (ReactDOM as ReactDOMClient)
+      .createRoot(container)
+      .render(<SchemaPanel titleFormatOptions={titleFormatOptions} />);
   }
 
   /**
    * Bind a plain text input to a string preference: populate from the stored
    * value and write back (trimmed) on input. Zotero's native `preference`
-   * binding is reserved for the menulist/checkbox; text inputs are handled here.
+   * binding is reserved for the checkbox; text inputs are handled here.
    */
   private initTextPref(elementId: string, pref: ZotanaPref): void {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion
@@ -90,20 +63,26 @@ class Preferences {
     });
   }
 
-  private async initPageTitleFormatMenu(): Promise<void> {
+  /**
+   * Resolve the localized reference-node-title dropdown options (rendered inside
+   * the React schema panel). The citation-key option needs Better BibTeX.
+   */
+  private async buildTitleFormatOptions(): Promise<TitleFormatOption[]> {
     const isBetterBibTeXActive = await this.isBetterBibTeXActive();
 
-    const menuItems = Object.values(PageTitleFormat).map<MenuItem>(
-      (format) => ({
+    const options: TitleFormatOption[] = [];
+    for (const format of Object.values(PageTitleFormat)) {
+      const label = await document.l10n.formatValue(
+        PAGE_TITLE_FORMAT_L10N_IDS[format],
+      );
+      options.push({
+        value: format,
+        label: label || format,
         disabled:
           format === PageTitleFormat.itemCitationKey && !isBetterBibTeXActive,
-        l10nId: PAGE_TITLE_FORMAT_L10N_IDS[format],
-        value: format,
-      }),
-    );
-
-    setMenuItems(this.pageTitleFormatMenu, menuItems);
-    this.pageTitleFormatMenu.disabled = false;
+      });
+    }
+    return options;
   }
 
   private async initSyncConfigsTable(): Promise<void> {

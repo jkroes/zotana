@@ -188,6 +188,7 @@ class ReferenceBuilder {
       title: await this.buildTitle(),
       tag: this.schema.tagName,
       tagId: this.schema.tagId,
+      entityTagNames: this.schema.entityTagNames,
       fields: this.fields,
     };
   }
