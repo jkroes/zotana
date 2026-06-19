@@ -56,6 +56,9 @@ export async function syncRegularItem(
   let nodeId: string;
   let signatures: Record<string, string>;
   let referencedFields: string[] = [];
+  // Stamp the create time on create; preserve it across in-place updates so the
+  // index-lag grace stays anchored to when the node was actually created.
+  let createdAt: number | undefined;
 
   if (existing) {
     const result = await updateNode(
@@ -66,9 +69,11 @@ export async function syncRegularItem(
       entityParentNodeId,
     );
     ({ nodeId, signatures, referencedFields } = result);
+    createdAt = existing.createdAt;
   } else {
     nodeId = await createNode(client, node, parentNodeId);
     signatures = fieldSignatures(node);
+    createdAt = Date.now();
   }
 
   const annotations = await syncAnnotations(
@@ -91,6 +96,7 @@ export async function syncRegularItem(
     // Network-free snapshot of the synced source content, recomputed with the
     // same helper the modify path uses so a no-op edit produces an equal value.
     contentSig: await contentSignature(item),
+    createdAt,
     annotations,
   });
 
@@ -123,6 +129,16 @@ function fieldSignatures(node: TanaReferenceNode): Record<string, string> {
  * a title sharing its text with 50+ other references could miss — vanishingly rare
  * for an author-date title, and the cost of a false "unreachable" is just a rebuild.
  */
+/**
+ * Tana's search index can lag a few seconds behind a freshly created node, so a
+ * reachability search miss right after a create is "not yet indexed", not "gone".
+ * Index lag is short and self-correcting; trashing is permanent — so a miss within
+ * this window of the node's creation is trusted (keep), and a later miss is real
+ * (rebuild). Anchored to each node's own create time, so a long-lived node trashed
+ * hours later is well past its window and still rebuilds correctly.
+ */
+const INDEX_LAG_GRACE_MS = 30_000;
+
 async function nodeReachable(
   client: TanaClient,
   schema: ResolvedSchema,
@@ -132,7 +148,15 @@ async function nodeReachable(
     { and: [{ hasType: schema.tagId }, { textContains: stored.title }] },
     { limit: 50 },
   );
-  return results.some((node) => node.id === stored.nodeId);
+  if (results.some((node) => node.id === stored.nodeId)) return true;
+
+  // Search miss: a node we created moments ago that the index hasn't caught up to,
+  // or one genuinely trashed/orphaned/purged. Tell them apart by age — no readNode
+  // (which can't distinguish a live node from a trashed/orphaned one anyway).
+  return (
+    stored.createdAt !== undefined &&
+    Date.now() - stored.createdAt <= INDEX_LAG_GRACE_MS
+  );
 }
 
 async function createNode(

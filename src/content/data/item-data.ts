@@ -38,6 +38,14 @@ export type TanaSyncData = {
    * non-synced or volatile fields). Absent for items synced before this existed.
    */
   contentSig?: string;
+  /**
+   * Epoch ms when this Tana node was created. Lets the reachability check tell a
+   * freshly-created node that Tana's search index hasn't caught up to yet (keep)
+   * from one that's genuinely gone (rebuild) — a search miss within a short grace
+   * of creation is treated as index lag. Set only on create, preserved across
+   * in-place updates; absent for items synced before this existed.
+   */
+  createdAt?: number;
   /** Zotero annotation key -> its Tana node state. */
   annotations: Record<string, StoredAnnotation>;
 };
@@ -74,6 +82,8 @@ function readSyncData(attachment: Zotero.Item): TanaSyncData | undefined {
     fields: parseFields(parsed.fields),
     contentSig:
       typeof parsed.contentSig === 'string' ? parsed.contentSig : undefined,
+    createdAt:
+      typeof parsed.createdAt === 'number' ? parsed.createdAt : undefined,
     annotations: parseAnnotations(parsed.annotations),
   };
 }
