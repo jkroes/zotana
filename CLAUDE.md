@@ -19,6 +19,29 @@ pnpm create-xpi    # repackage build/ into xpi/ (build only compiles to build/)
 Release workflow (green-first, then tag; never move a published version tag) is
 in `docs/RELEASING.md`.
 
+## After pushing: watch CI to green
+
+Whenever you push to `main`, the **Build** workflow runs `vp run verify`
+(`vp check` + tests) and builds the plugin. After any push, watch it through to
+completion and don't consider the work done until it's green:
+
+```sh
+gh run watch $(gh run list --branch main --workflow Build --limit 1 \
+  --json databaseId -q '.[0].databaseId') --exit-status
+```
+
+If Build fails, read the failed step and act on the *kind* of failure:
+
+- **Real code/format failure** (e.g. `vp check` formatting, failing test, type
+  error, build error): fix it locally, verify with `pnpm verify`, commit, push,
+  and watch again.
+- **Transient infra failure** (e.g. `actions/checkout` "Repository not found",
+  network/runner blips — the job dies before `vp run verify`): don't change code.
+  Re-run the same run with `gh run rerun <run-id>` and watch again.
+
+Repeat until Build is green. Only then is the change actually verified — and only
+a green `main` is eligible to be tagged for release (see `docs/RELEASING.md`).
+
 ## Architecture
 
 Source lives under `src/content/`.
