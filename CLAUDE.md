@@ -30,7 +30,7 @@ gh run watch $(gh run list --branch main --workflow Build --limit 1 \
   --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-If Build fails, read the failed step and act on the *kind* of failure:
+If Build fails, read the failed step and act on the _kind_ of failure:
 
 - **Real code/format failure** (e.g. `vp check` formatting, failing test, type
   error, build error): fix it locally, verify with `pnpm verify`, commit, push,
