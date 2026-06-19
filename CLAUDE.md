@@ -277,6 +277,10 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
 nodes` command. (Also in README.)
 - **Entity resolution** substring-searches with `limit: 50` and matches the name
   exactly client-side; an exact match beyond the first 50 hits is missed (rare).
+- **Standalone note items are not synced** — `sync-job` skips `item.isNote()`.
+  This is a non-goal, not deferred work: supporting it would need an
+  HTML→Tana-Paste converter (Notero's `html-to-notion` is the reference). An
+  item's own `abstractNote` still syncs as the abstract field. (Also in README.)
 
 ## Open work
 
@@ -294,9 +298,6 @@ nodes` command. (Also in README.)
     **plain-text-URL** downgrade (Known limitations). Caveat: `linksTo` only indexes a
     reference made in the Tana UI, not one created via the API/Inbox. Not yet tagged
     for release (separate green-`main`-then-tag step; see `docs/RELEASING.md`).
-- **Rich-text note syncing** — deferred. `sync-job` skips note items; supporting
-  them needs an HTML→Tana-Paste converter (Notero's `html-to-notion` is the
-  reference).
 - **Clean `tsc`:** `typecheck` reports errors inside `node_modules/@voidzero-dev/*`
   (vite-plus's own `.d.ts`); add `"skipLibCheck": true` to `tsconfig.json` if a
   clean run is wanted.
