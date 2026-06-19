@@ -48,7 +48,8 @@ export async function copyAssets(): Promise<void> {
   // just to enumerate once, which blows the macOS EMFILE limit (no fsevents
   // prebuilt → fs.watch fallback). fs-extra's recursive copy needs no watchers.
   await fs.copy(srcDir, buildDir, {
-    filter: (srcPath) => !IGNORE_PATTERNS.some((pattern) => pattern.test(srcPath)),
+    filter: (srcPath) =>
+      !IGNORE_PATTERNS.some((pattern) => pattern.test(srcPath)),
   });
 }
 

@@ -1,6 +1,10 @@
 import { ItemSyncError, LocalizableError } from '../errors';
 import { getSchemaConfig } from '../prefs/schema-config';
-import { ZotanaPref, getZotanaPref, getRequiredZotanaPref } from '../prefs/zotana-pref';
+import {
+  ZotanaPref,
+  getZotanaPref,
+  getRequiredZotanaPref,
+} from '../prefs/zotana-pref';
 import { TanaClient } from '../tana/client';
 import { TitleFormat } from '../tana/reference-builder';
 import { ensureSchema, type ResolvedSchema } from '../tana/schema';

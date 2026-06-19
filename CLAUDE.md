@@ -55,7 +55,7 @@ enabled}] }`, persisted as JSON in the `schemaConfig` pref. `mergeSchemaConfig`
 - **`sync/sync-regular-item.ts`** — the upsert (reachability check, per-field
   diff, warn-and-skip; see decisions below).
 - **`sync/content-signature.ts`** — network-free signature of an item's synced
-  *source* fields (excludes `dateModified` / `year` / citations). The
+  _source_ fields (excludes `dateModified` / `year` / citations). The
   sync-on-modify path skips a sync when it matches the last one, so edits to
   non-synced or volatile fields don't trigger a pointless sync. `fieldSignature`
   lives here.
@@ -102,7 +102,7 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
 - **Partial-date granularity** — emit `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` from
   Zotero's multipart SQL date; no season→month padding.
 - **Sync-on-modify = global debounce + content-signature no-op skip.**
-  `item.modify` fires for *any* edit, so the modify path compares
+  `item.modify` fires for _any_ edit, so the modify path compares
   `contentSignature(item)` (source fields only) against the last sync and drops
   no-ops before enqueuing. Surviving edits feed one **global** `SYNC_DEBOUNCE_MS`
   (3 s) timer — a single batched job across all queued items, serialized by
@@ -134,7 +134,7 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   field defs.
 - **Search rejects boolean query params.** `/nodes/search` validates booleans
   strictly and 400s on the string `"true"` a GET query string carries (e.g.
-  `query[ownedBy][recursive]`) — numbers like `limit` *are* coerced, booleans are
+  `query[ownedBy][recursive]`) — numbers like `limit` _are_ coerced, booleans are
   not. Omit the boolean and rely on the documented default (`ownedBy.recursive`
   defaults `true`).
 
