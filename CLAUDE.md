@@ -16,6 +16,9 @@ pnpm typecheck     # tsc
 pnpm create-xpi    # repackage build/ into xpi/ (build only compiles to build/)
 ```
 
+Release workflow (green-first, then tag; never move a published version tag) is
+in `docs/RELEASING.md`.
+
 ## Architecture
 
 Source lives under `src/content/`.
