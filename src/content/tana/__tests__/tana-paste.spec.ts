@@ -6,7 +6,13 @@ function node(
   fields: TanaReferenceNode['fields'],
   title = 'Vaswani, 2017',
 ): TanaReferenceNode {
-  return { title, tag: 'reference', tagId: 'p5LeXSkgwLnh', fields };
+  return {
+    title,
+    tag: 'reference',
+    tagId: 'p5LeXSkgwLnh',
+    entityTagNames: { Person: 'Person', Organization: 'Organization' },
+    fields,
+  };
 }
 
 describe('toTanaPaste', () => {
@@ -89,9 +95,20 @@ describe('toTanaPaste', () => {
 });
 
 describe('linkMarkup', () => {
+  const entityTagNames = { Person: 'Person', Organization: 'Organization' };
+
   it('formats an entity reference', () => {
-    expect(linkMarkup({ name: 'Ada Lovelace', tag: 'Person' })).toBe(
-      '[[Ada Lovelace #Person]]',
-    );
+    expect(
+      linkMarkup({ name: 'Ada Lovelace', tag: 'Person' }, entityTagNames),
+    ).toBe('[[Ada Lovelace #Person]]');
+  });
+
+  it('resolves the logical key to the configured supertag name', () => {
+    expect(
+      linkMarkup(
+        { name: 'Ada Lovelace', tag: 'Person' },
+        { Person: 'Author', Organization: 'Publisher' },
+      ),
+    ).toBe('[[Ada Lovelace #Author]]');
   });
 });

@@ -46,6 +46,7 @@ const schema: ResolvedSchema = {
   tagId: TAG.reference,
   tagName: 'reference',
   entityTagIds: { Person: TAG.Person, Organization: TAG.Organization },
+  entityTagNames: { Person: 'Person', Organization: 'Organization' },
   annotationTags: {
     highlight: { tagId: 'tag-highlight', annotationFieldId: 'fid-hl' },
     comment: { tagId: 'tag-comment', annotationFieldId: 'fid-cm' },
@@ -91,6 +92,7 @@ const referenceNode: TanaReferenceNode = {
   title: 'Vaswani, 2017',
   tag: 'reference',
   tagId: TAG.reference,
+  entityTagNames: { Person: 'Person', Organization: 'Organization' },
   fields: [
     { ...FIELD.item, type: 'item', value: 'zotero://x' },
     { ...FIELD.doi, type: 'url', value: 'https://doi.org/10.x' },
@@ -513,6 +515,7 @@ describe('syncRegularItem — update path', () => {
       title: 'Vaswani, 2017',
       tag: 'reference',
       tagId: TAG.reference,
+      entityTagNames: { Person: 'Person', Organization: 'Organization' },
       fields: [
         {
           name: 'Tags',

@@ -100,14 +100,46 @@ In Zotero → Settings → Zotana:
 2. **Parent Node ID** — paste the ID of the Tana node where new reference nodes
    are created (e.g. Library).
 3. **Local API URL** — optional; defaults to `http://localhost:8262`.
-4. In the **schema** panel, pick the workspace, keep or rename the reference tag
-   and fields (blank field names use their defaults), choose which fields sync,
-   and click **Create / refresh schema in Tana** to create the tag + fields.
-5. Enable the collections you want to sync, and choose the reference node title
-   format.
+4. Enable the collections you want to sync.
+5. In the **Tana Schema** panel (at the bottom): pick the workspace; name every
+   supertag Zotana creates (Person / Organization / highlight / comment / image,
+   and the reference tag); choose the **reference node title** format; keep or
+   rename the fields (blank field names use their defaults) and choose which sync;
+   then click **Create / refresh schema in Tana** to create the tags + fields.
 
 Then right-click a collection or items → **Sync to Tana**, or rely on automatic
 sync-on-modify.
+
+### Renaming tags & fields vs. Create / refresh
+
+Zotana links to Tana **by name**, and it can only **create or find** a tag/field
+— it never renames one that already exists in Tana. Keep that distinction in
+mind:
+
+- **Create / refresh schema** makes sure every tag and enabled field _exists_ in
+  Tana, creating any that are missing. You need it for **first-time setup**, after
+  **enabling a new field** (or adding a tag) you want created, or to **validate**
+  the connection up front. You don't strictly have to press it — Zotana runs the
+  same check automatically before every sync — but the button does it on demand
+  and shows a status.
+- **Renaming** keeps an existing tag/field and its data. Because Zotana matches by
+  the configured name, a name that matches a tag/field in Tana is **reused**
+  (identity, values, and inbound links preserved); a name that doesn't match makes
+  Zotana **create a new one**, orphaning the old. So to rename without losing
+  anything, do it in **both** places: rename it in **Tana's UI** (Tana keeps the
+  underlying tag/field, just changes its name) **and** set the **same** name in
+  the Zotana schema panel. Renaming in only one place produces a duplicate.
+
+| Goal                                           | Do this                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| Add the schema / a newly-enabled field to Tana | **Create / refresh** (or just sync — it runs the same check) |
+| Rename a tag/field and keep its data           | Rename in **Tana** _and_ set the matching name in Zotana     |
+| Change which fields sync, field order, etc.    | Edit in Zotana; the next sync applies it                     |
+
+For the **reference and entity tags** specifically, existing nodes are updated in
+place and keep whatever tag they were created with — so a Zotana-only rename leaves
+old nodes on the old tag and new nodes on the new one (a mix). Renaming in Tana
+first avoids that, since Tana preserves the tag for every node already using it.
 
 ## Known limitations
 

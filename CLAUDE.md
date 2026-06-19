@@ -70,26 +70,36 @@ Source lives under `src/content/`.
   attribute/tag IDs.** `CATALOG` is ordered alphabetically by `defaultName` and
   is the single source of truth for that order (drives the prefs table, stored
   config, and field-creation order). `effectiveFieldName(key, name)` resolves a
-  blank configured name to the catalog default.
+  blank configured name to the catalog default. `ENTITY_TAG_NAMES` /
+  `ANNOTATION_TAG_NAMES` are the **default** (user-overridable) names for the aux
+  supertags; `ENTITY_TAG_KEYS` / `ANNOTATION_TAG_KEYS` are typed key tuples for
+  iterating them.
 - **`tana/schema.ts`** — `ensureSchema(client, config, {workspaceId,
-optionSeeds})`: finds the tag by name (creates it + `#Person` /
-  `#Organization` and the annotation tags `#highlight` / `#comment` / `#image`,
-  each with an `Annotation` back-link field, if missing), parses
-  `/tags/{id}/schema` markdown for name→id, creates missing **enabled** fields
-  with their catalog `dataType`,
-  and seed-then-trashes the placeholder option needed to create empty Options
-  fields. Returns `ResolvedSchema`. Run as a sync preflight, so the first sync
-  auto-bootstraps.
-- **`prefs/schema-config.ts`** — `SchemaConfig { tagName, fields:[{key, name,
-enabled}] }`, persisted as JSON in the `schemaConfig` pref. `mergeSchemaConfig`
-  reconciles a stored config against the catalog (fills new fields, drops unknown
-  keys, trims names; blank stays blank). A blank `name` means "use the catalog
-  default" (rendered as a grey placeholder) and is resolved at sync time.
-- **`prefs/schema-panel.tsx`** — schema prefs UI: workspace dropdown, tag-name
-  input, per-field table (sync checkbox + rename + read-only type), and a
-  **Create / refresh schema in Tana** button.
+optionSeeds})`: finds the reference tag and the aux tags (Person / Organization /
+  highlight / comment / image) **by their configured names** (`config.entityTags`
+  / `config.annotationTags`), creating any that are missing (annotation tags get
+  an `Annotation` back-link field), parses `/tags/{id}/schema` markdown for
+  name→id, creates missing **enabled** fields with their catalog `dataType`, and
+  seed-then-trashes the placeholder option needed to create empty Options fields.
+  Returns `ResolvedSchema` (incl. `entityTagNames`). Run as a sync preflight, so
+  the first sync auto-bootstraps.
+- **`prefs/schema-config.ts`** — `SchemaConfig { tagName, entityTags,
+annotationTags, fields:[{key, name, enabled}] }`, persisted as JSON in the
+  `schemaConfig` pref. `mergeSchemaConfig` reconciles a stored config against the
+  catalog (fills new fields, drops unknown keys, trims names; blank field name
+  stays blank) and fills blank/missing tag names with the constant defaults (tag
+  names are always concrete, unlike field names). A blank field `name` means "use
+  the catalog default" (grey placeholder), resolved at sync time.
+- **`prefs/schema-panel.tsx`** — schema prefs UI: workspace dropdown, a name
+  input for **every supertag** (Person / Organization / highlight / comment /
+  image, then the reference tag), the **reference-node-title dropdown**, the
+  per-field table (sync checkbox + rename + read-only type), and a **Create /
+  refresh schema in Tana** button. Receives the (localized) title-format options
+  as props.
 - **`prefs/preferences.tsx` + `preferences.xhtml`** — token, parent node ID,
-  optional Local API URL, title-format dropdown, sync-on-modify, collection table.
+  optional Local API URL, sync-on-modify, collection table. The schema groupbox
+  is **last**; preferences resolves the title-format options (Fluent labels +
+  Better-BibTeX gating) and passes them into the React schema panel.
 - **`data/item-data.ts`** — stores `{nodeId, title}` + the annotation map +
   per-field signature map in a hidden Zotero link attachment (the upsert key).
   Both the attachment create (`linkFromURL`) and the note save (`saveTx`) pass
@@ -122,6 +132,32 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   links. The Tana node ID is stored on the Zotero item.
 - **Schema configured by name, resolved/bootstrapped at runtime** — no hardcoded
   workspace IDs; renaming a field in prefs (and in Tana) keeps the link working.
+- **Every supertag name is user-configurable** (reference + Person / Organization
+  / highlight / comment / image), stored in `SchemaConfig` and resolved/created by
+  `ensureSchema`. `TanaLink.tag` stays the **logical** `EntityTag` key, NOT the
+  display name: the update path keys off it to find the tag id
+  (`entityTagIds[link.tag]`, writing entity nodes by-id), and the create paste
+  resolves it to the configured name only at serialization via the node's
+  `entityTagNames` map (`linkMarkup`). Keeping the key (not the name) on the link
+  is what lets a rename work without touching the update path. The
+  content-signature stand-in uses the **constant** entity names so renaming an
+  entity tag doesn't churn every item's signature (the signature tracks item
+  content, not schema naming).
+- **Resolve-by-name; create-or-find, never rename.** `ensureSchema` matches every
+  tag/field by its configured **name** and **creates** any that are missing — it
+  has no rename op (the Local API's `addField`/`createTag` only create). It runs
+  as a **sync preflight**, so a sync auto-bootstraps whatever's missing; the prefs
+  **Create / refresh** button just runs the same `ensureSchema` on demand (to
+  bootstrap up front or surface errors), it does nothing a sync wouldn't.
+  Consequences for **renaming**: a name in `SchemaConfig` that matches an existing
+  Tana tag/field → reused (identity/data/back-links preserved); a name that
+  doesn't → a fresh tag/field is created, orphaning the old one. So a rename that
+  keeps data must happen in **both** places: rename in the Tana UI (Tana keeps the
+  object's id, so all nodes already tagged with it follow) **and** set the matching
+  name in `SchemaConfig`. Renaming in only one place duplicates. (Existing
+  reference/entity nodes are updated in place by node id and keep whatever tag they
+  were created with, so a Zotana-only rename also yields a mixed old/new tag
+  state — another reason to rename in Tana first.)
 - **Entity fields (Creators / Editors / Contributors / Publisher) are Options
   fields written by-id via `setFieldOption`**, NOT `setFieldContent`
   (`setFieldContent` would store the node id as literal text). This reuses the

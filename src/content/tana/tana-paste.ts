@@ -26,6 +26,11 @@ export type TanaScalarType =
 
 export type TanaFieldType = TanaScalarType | 'links' | 'optionList';
 
+/**
+ * An entity reference: `tag` is the logical entity key (Person / Organization);
+ * the configured supertag NAME is resolved at serialization via the node's
+ * `entityTagNames` map.
+ */
 export type TanaLink = { name: string; tag: EntityTag };
 
 export type TanaField =
@@ -39,6 +44,8 @@ export type TanaReferenceNode = {
   title: string;
   tag: string;
   tagId: string;
+  /** Entity supertag NAMES, for resolving inline `[[Name #Tag]]` entity refs. */
+  entityTagNames: Record<EntityTag, string>;
   fields: TanaField[];
 };
 
@@ -62,9 +69,15 @@ function scalarValueText(field: {
   }
 }
 
-/** Render one entity link as Tana reference markup: `[[Name #Person]]`. */
-export function linkMarkup(link: TanaLink): string {
-  return `[[${link.name} #${link.tag}]]`;
+/**
+ * Render one entity link as Tana reference markup: `[[Name #Person]]`. The
+ * link's logical entity key is resolved to the configured supertag name.
+ */
+export function linkMarkup(
+  link: TanaLink,
+  entityTagNames: Record<EntityTag, string>,
+): string {
+  return `[[${link.name} #${entityTagNames[link.tag]}]]`;
 }
 
 export function toTanaPaste(
@@ -80,7 +93,7 @@ export function toTanaPaste(
     if (field.type === 'links') {
       lines.push(`  - ${label}::`);
       for (const link of field.links) {
-        lines.push(`    - ${linkMarkup(link)}`);
+        lines.push(`    - ${linkMarkup(link, node.entityTagNames)}`);
       }
     } else if (field.type === 'optionList') {
       // One child node per option value (multi-value options field).

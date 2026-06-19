@@ -45,38 +45,6 @@
 
 <groupbox class="zotana-groupbox">
   <label>
-    <html:h2 data-l10n-id="zotana-preferences-schema-groupbox-heading" />
-  </label>
-  <label data-l10n-id="zotana-preferences-schema-groupbox-description" />
-  <html:div
-    id="zotana-schemaPanel-container"
-    class="zotana-margin-block-start"
-  />
-</groupbox>
-
-<groupbox class="zotana-groupbox">
-  <label>
-    <html:h2 data-l10n-id="zotana-preferences-properties-groupbox-heading" />
-  </label>
-  <label data-l10n-id="zotana-preferences-properties-groupbox-description" />
-  <hbox align="center" class="zotana-margin-block-start">
-    <label
-      control="zotana-pageTitleFormat"
-      data-l10n-id="zotana-preferences-page-title-format"
-    />
-    <menulist
-      id="zotana-pageTitleFormat"
-      disabled="true"
-      native="true"
-      preference="extensions.zotana.pageTitleFormat"
-    >
-      <menupopup />
-    </menulist>
-  </hbox>
-</groupbox>
-
-<groupbox class="zotana-groupbox">
-  <label>
     <html:h2 data-l10n-id="zotana-preferences-sync-groupbox-heading" />
   </label>
   <label data-l10n-id="zotana-preferences-sync-groupbox-description1" />
@@ -92,5 +60,16 @@
     id="zotana-syncOnModifyItems"
     native="true"
     preference="extensions.zotana.syncOnModifyItems"
+  />
+</groupbox>
+
+<groupbox class="zotana-groupbox">
+  <label>
+    <html:h2 data-l10n-id="zotana-preferences-schema-groupbox-heading" />
+  </label>
+  <label data-l10n-id="zotana-preferences-schema-groupbox-description" />
+  <html:div
+    id="zotana-schemaPanel-container"
+    class="zotana-margin-block-start"
   />
 </groupbox>

@@ -56,6 +56,12 @@ function createClientMock() {
 
 const config: SchemaConfig = {
   tagName: 'zotero',
+  entityTags: { Person: 'Person', Organization: 'Organization' },
+  annotationTags: {
+    highlight: 'highlight',
+    comment: 'comment',
+    image: 'image',
+  },
   fields: [
     { key: 'creators', name: 'Creators', enabled: true }, // options + transient seed
     { key: 'itemType', name: 'Item Type', enabled: true }, // options + real seed
@@ -139,11 +145,46 @@ describe('ensureSchema — bootstrap (nothing exists)', () => {
   });
 });
 
+describe('ensureSchema — custom entity/annotation tag names', () => {
+  it('creates the aux tags under the configured names and returns entityTagNames', async () => {
+    const client = createClientMock();
+    const customConfig: SchemaConfig = {
+      tagName: 'zotero',
+      entityTags: { Person: 'Author', Organization: 'Publisher' },
+      annotationTags: { highlight: 'Quote', comment: 'Note', image: 'Figure' },
+      fields: [{ key: 'abstract', name: 'Abstract', enabled: true }],
+    };
+
+    const schema = await ensureSchema(
+      client as unknown as TanaClient,
+      customConfig,
+      { workspaceId: 'ws1' },
+    );
+
+    // tags created under the configured names (mock returns `tag-${name}`)
+    expect(schema.entityTagIds.Person).toBe('tag-Author');
+    expect(schema.entityTagIds.Organization).toBe('tag-Publisher');
+    expect(schema.annotationTags.highlight.tagId).toBe('tag-Quote');
+    expect(schema.annotationTags.image.tagId).toBe('tag-Figure');
+    // names surface for the inline `[[Name #Tag]]` paste refs
+    expect(schema.entityTagNames).toEqual({
+      Person: 'Author',
+      Organization: 'Publisher',
+    });
+  });
+});
+
 describe('ensureSchema — blank names resolve to the catalog default', () => {
   it('creates a field under its catalog default name when the config name is blank', async () => {
     const client = createClientMock();
     const blankConfig: SchemaConfig = {
       tagName: 'zotero',
+      entityTags: { Person: 'Person', Organization: 'Organization' },
+      annotationTags: {
+        highlight: 'highlight',
+        comment: 'comment',
+        image: 'image',
+      },
       fields: [{ key: 'abstract', name: '', enabled: true }],
     };
 

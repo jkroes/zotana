@@ -15,6 +15,7 @@
 
 import { getSchemaConfig, type SchemaConfig } from '../prefs/schema-config';
 import {
+  ENTITY_TAG_NAMES,
   effectiveFieldName,
   type EntityTag,
   type FieldKey,
@@ -109,6 +110,9 @@ function localSchema(config: SchemaConfig): ResolvedSchema {
     tagId: '',
     tagName: config.tagName,
     entityTagIds,
+    // Constant names (not config) keep the signature stable when a user renames
+    // an entity tag — the signature tracks item content, not schema naming.
+    entityTagNames: { ...ENTITY_TAG_NAMES },
     annotationTags: {
       highlight: emptyAnnotationTag,
       comment: emptyAnnotationTag,

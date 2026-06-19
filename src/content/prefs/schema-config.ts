@@ -8,7 +8,17 @@
  * `schemaConfig` preference.
  */
 
-import { CATALOG, DEFAULT_TAG_NAME, type FieldKey } from '../tana/constants';
+import {
+  ANNOTATION_TAG_KEYS,
+  ANNOTATION_TAG_NAMES,
+  CATALOG,
+  DEFAULT_TAG_NAME,
+  ENTITY_TAG_KEYS,
+  ENTITY_TAG_NAMES,
+  type AnnotationKind,
+  type EntityTag,
+  type FieldKey,
+} from '../tana/constants';
 import { isObject } from '../utils';
 
 import { ZotanaPref, getZotanaPref, setZotanaPref } from './zotana-pref';
@@ -24,23 +34,52 @@ export type FieldConfig = {
 export type SchemaConfig = {
   /** Reference supertag name (used to resolve/create the tag). */
   tagName: string;
+  /** Names of the entity supertags (Person / Organization). */
+  entityTags: Record<EntityTag, string>;
+  /** Names of the annotation supertags (highlight / comment / image). */
+  annotationTags: Record<AnnotationKind, string>;
   /** One entry per catalog field, in catalog order. */
   fields: FieldConfig[];
 };
 
 /**
- * A fresh config: default tag name + every catalog field enabled, with no name
+ * A fresh config: default tag names + every catalog field enabled, with no name
  * override (each field shows its catalog default as a placeholder).
  */
 export function defaultSchemaConfig(): SchemaConfig {
   return {
     tagName: DEFAULT_TAG_NAME,
+    entityTags: { ...ENTITY_TAG_NAMES },
+    annotationTags: { ...ANNOTATION_TAG_NAMES },
     fields: CATALOG.map((entry) => ({
       key: entry.key,
       name: '',
       enabled: true,
     })),
   };
+}
+
+/**
+ * Reconcile a stored `Record<key, name>` of tag names against the defaults:
+ * keep a non-blank stored name per key, fall back to the default otherwise. Tag
+ * names are always concrete (unlike field names, which may be blank); the UI
+ * prefills the default and resolution happens here.
+ */
+function mergeTagNames<K extends string>(
+  keys: readonly K[],
+  defaults: Record<K, string>,
+  raw: unknown,
+): Record<K, string> {
+  const merged = { ...defaults };
+  if (isObject(raw)) {
+    for (const key of keys) {
+      const stored = raw[key];
+      if (typeof stored === 'string' && stored.trim()) {
+        merged[key] = stored.trim();
+      }
+    }
+  }
+  return merged;
 }
 
 /**
@@ -58,6 +97,17 @@ export function mergeSchemaConfig(raw: unknown): SchemaConfig {
     typeof raw.tagName === 'string' && raw.tagName.trim()
       ? raw.tagName.trim()
       : defaults.tagName;
+
+  const entityTags = mergeTagNames(
+    ENTITY_TAG_KEYS,
+    defaults.entityTags,
+    raw.entityTags,
+  );
+  const annotationTags = mergeTagNames(
+    ANNOTATION_TAG_KEYS,
+    defaults.annotationTags,
+    raw.annotationTags,
+  );
 
   const stored: Map<string, unknown> = new Map();
   if (Array.isArray(raw.fields)) {
@@ -81,7 +131,7 @@ export function mergeSchemaConfig(raw: unknown): SchemaConfig {
     };
   });
 
-  return { tagName, fields };
+  return { tagName, entityTags, annotationTags, fields };
 }
 
 export function getSchemaConfig(): SchemaConfig {
