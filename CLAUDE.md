@@ -132,6 +132,14 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   `sync-regular-item` searches by tag + stored title and checks the stored nodeId
   is among the hits: reachable → update in place; unreachable (trashed / orphaned
   / purged all collapse here) → rebuild.
+- **Index-lag grace on reachability.** Tana's search index lags a few seconds
+  behind a freshly created node, so a re-sync within that window (e.g. drop-to-
+  collection auto-sync, then a manual collection sync) would search-miss the
+  just-made node and rebuild a duplicate. Each node stores a `createdAt`; a search
+  miss within `INDEX_LAG_GRACE_MS` (30 s) of creation is trusted (keep), a later
+  miss is real (rebuild). Age cleanly separates "not yet indexed" from "no longer
+  indexed" because lag is short/self-correcting and trashing is permanent — no
+  `readNode` (it 200s for live/trashed/orphaned alike, so it can't disambiguate).
 - **Per-field diff** — a `setFieldContent` replace trashes the prior value node,
   so an unconditional rewrite buried ~20 nodes in the Tana trash every sync. Only
   changed fields are written; only previously-set fields are cleared.
@@ -201,14 +209,19 @@ nodes` command. (Also in README.)
   removed), **field-clear** (value node cleared + node name re-renders),
   **URL-render** (markdown-link clickability proved unreliable across fields/nodes
   → downgraded to plain text everywhere; see Known limitations), and **annotation
-  add/delete deltas** + the new annotation tags/back-links. Caveat: `linksTo` only
-  indexes a reference made in the Tana UI, not one created via the API/Inbox. Still
-  unwalked: non-author-date title formats, group-library items, date granularity.
+  add/delete deltas** + the new annotation tags/back-links, all **six title
+  formats**, **group-library** items (back-links use `/groups/{id}/`), and **date
+  granularity** (YYYY / YYYY-MM / YYYY-MM-DD). Caveat: `linksTo` only indexes a
+  reference made in the Tana UI, not one created via the API/Inbox. Live walk of
+  v0.2 is **complete**.
 - **Duplicate-ProgressWindow fix (branch `fix/duplicate-sync-progresswindow`, not
   merged):** editing a title makes Zotero's File Renaming auto-rename the linked
   PDF, firing a 2nd `item.modify` mid-sync that raced the contentSig persist and
   started a duplicate sync. Fixed with an in-flight guard in `sync-manager.ts`
   (`syncingItemIDs`) + `skipNotifier` on `saveTanaSyncData`'s update saveTx.
+- **Index-lag duplicate fix (same branch):** a rapid second sync of a brand-new
+  item rebuilt a duplicate because the reachability search hadn't indexed the fresh
+  node yet. Fixed with the `createdAt` index-lag grace (see Key design decisions).
 - **Annotation tags + back-link (implemented, bootstrap live-verified 2026-06-19):**
   highlight→`#highlight`, note→`#comment`, image→`#image`, each with an `Annotation`
   URL field holding a `zotero://open-pdf/...?annotation=KEY` deep link (plain text,
