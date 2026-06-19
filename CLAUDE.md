@@ -100,6 +100,9 @@ annotationTags, fields:[{key, name, enabled}] }`, persisted as JSON in the
   optional Local API URL, sync-on-modify, collection table. The schema groupbox
   is **last**; preferences resolves the title-format options (Fluent labels +
   Better-BibTeX gating) and passes them into the React schema panel.
+- **`locale/en-US/zotana.ftl`** — Fluent source of truth for every user-facing
+  string (menu/pref labels, groupbox descriptions, progress + error text);
+  check/edit here when verifying or changing UI wording (e.g. README accuracy).
 - **`data/item-data.ts`** — stores `{nodeId, title}` + the annotation map +
   per-field signature map in a hidden Zotero link attachment (the upsert key).
   Both the attachment create (`linkFromURL`) and the note save (`saveTx`) pass

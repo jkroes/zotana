@@ -100,15 +100,18 @@ In Zotero → Settings → Zotana:
 2. **Parent Node ID** — paste the ID of the Tana node where new reference nodes
    are created (e.g. Library).
 3. **Local API URL** — optional; defaults to `http://localhost:8262`.
-4. Enable the collections you want to sync.
+4. Enable the collections you want to sync, and tick **Sync when items are
+   modified** to turn on automatic re-sync (it's in the same Sync Preferences
+   group; leave it off to sync only on demand or when an item is added to a
+   watched collection).
 5. In the **Tana Schema** panel (at the bottom): pick the workspace; name every
    supertag Zotana creates (Person / Organization / highlight / comment / image,
    and the reference tag); choose the **reference node title** format; keep or
    rename the fields (blank field names use their defaults) and choose which sync;
    then click **Create / refresh schema in Tana** to create the tags + fields.
 
-Then right-click a collection or items → **Sync to Tana**, or rely on automatic
-sync-on-modify.
+Then right-click a collection → **Sync Items to Tana**, or right-click items →
+**Sync to Tana**, or rely on automatic sync-on-modify.
 
 ### Renaming tags & fields vs. Create / refresh
 
