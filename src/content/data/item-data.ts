@@ -61,6 +61,16 @@ export type TanaSyncData = {
    * in-place updates; absent for items synced before this existed.
    */
   createdAt?: number;
+  /**
+   * Epoch ms when this node was last (re)named in Tana — set on create and
+   * refreshed whenever a sync renames the node (e.g. a title-format change).
+   * Anchors the reachability index-lag grace: Tana's search lags a rename just
+   * as it lags a create, so a search miss within the grace of the last rename is
+   * treated as "not yet reindexed" (keep), not "deleted" (rebuild). Without this,
+   * a rename + quick re-sync search-missed and rebuilt a duplicate. Absent for
+   * items synced before this existed; falls back to `createdAt`.
+   */
+  titleSyncedAt?: number;
   /** Zotero annotation key -> its Tana node state. */
   annotations: Record<string, StoredAnnotation>;
 };
@@ -99,6 +109,10 @@ function readSyncData(attachment: Zotero.Item): TanaSyncData | undefined {
       typeof parsed.contentSig === 'string' ? parsed.contentSig : undefined,
     createdAt:
       typeof parsed.createdAt === 'number' ? parsed.createdAt : undefined,
+    titleSyncedAt:
+      typeof parsed.titleSyncedAt === 'number'
+        ? parsed.titleSyncedAt
+        : undefined,
     annotations: parseAnnotations(parsed.annotations),
   };
 }

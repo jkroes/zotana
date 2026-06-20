@@ -69,6 +69,7 @@ function run(
     createZoteroItemMock({}),
     'ref-node',
     stored,
+    'ws-id',
   );
 }
 

@@ -178,13 +178,17 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   is among the hits: reachable → update in place; unreachable (trashed / orphaned
   / purged all collapse here) → rebuild.
 - **Index-lag grace on reachability.** Tana's search index lags a few seconds
-  behind a freshly created node, so a re-sync within that window (e.g. drop-to-
-  collection auto-sync, then a manual collection sync) would search-miss the
-  just-made node and rebuild a duplicate. Each node stores a `createdAt`; a search
-  miss within `INDEX_LAG_GRACE_MS` (30 s) of creation is trusted (keep), a later
-  miss is real (rebuild). Age cleanly separates "not yet indexed" from "no longer
-  indexed" because lag is short/self-correcting and trashing is permanent — no
-  `readNode` (it 200s for live/trashed/orphaned alike, so it can't disambiguate).
+  behind a freshly created **or renamed** node, so a re-sync within that window
+  (e.g. drop-to-collection auto-sync then a manual sync; or a title-format change
+  then a re-sync) would search-miss the node and rebuild a duplicate — the
+  reachability search is by node name, so a rename's lag bites just like a
+  create's. Each node stores `createdAt` and `titleSyncedAt` (set on create,
+  refreshed on every rename); a search miss within `INDEX_LAG_GRACE_MS` (30 s) of
+  `titleSyncedAt ?? createdAt` is trusted (keep), a later miss is real (rebuild).
+  Age cleanly separates "not yet indexed" from "no longer indexed" because lag is
+  short/self-correcting and trashing is permanent — no `readNode` (it 200s for
+  live/trashed/orphaned alike, so it can't disambiguate). Anchoring to the last
+  rename (not just create) is what stops a title-format change from duplicating.
 - **Per-field diff** — a `setFieldContent` replace trashes the prior value node,
   so an unconditional rewrite buried ~20 nodes in the Tana trash every sync. Only
   changed fields are written; only previously-set fields are cleared.
@@ -271,6 +275,15 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   `query[ownedBy][recursive]`) — numbers like `limit` _are_ coerced, booleans are
   not. Omit the boolean and rely on the documented default (`ownedBy.recursive`
   defaults `true`).
+- **Search defaults to the _focused_ workspace — always pass `workspaceIds`.**
+  `/nodes/search` with no `workspaceIds` searches only Tana's currently-focused
+  workspace (whatever the user last opened in the app), NOT the token's or the
+  configured one. This is non-deterministic: with the wrong workspace focused,
+  every reachability search misses → the node is judged unreachable → rebuilt as a
+  **duplicate** (reference, entity, AND annotation nodes alike). So every
+  `client.search` call in the sync path passes `workspaceIds: [schema.workspaceId]`.
+  Entity/reference/annotation nodes all live in the configured workspace, so
+  scoping is always correct.
 
 ## Known limitations
 
@@ -288,6 +301,17 @@ nodes` command. (Also in README.)
 
 ## Open work
 
+- **v0.3.1 (2026-06-20).** Workspace-by-ID configuration + two duplicate-node
+  fixes for title-format changes:
+  - Schema panel: Workspace **dropdown → text field + Detect + on-demand picker**
+    (the old dropdown loaded once at mount, went stale on a new token / closed
+    Tana); sync resolves the workspace from the configured ID only.
+  - **Every sync search now passes `workspaceIds`** — `/nodes/search` otherwise
+    defaults to the focused workspace, so reachability missed and rebuilt
+    duplicates (reference/entity/annotation). Primary duplicate cause.
+  - **Index-lag grace extended to renames** via `titleSyncedAt` — a title-format
+    change renames the node, and a quick re-sync within the index lag used to
+    rebuild a duplicate; now it updates in place. Live-verified.
 - **v0.3 landed + tagged (2026-06-19, PR #11).** Two annotation-sync changes,
   live-verified against real Zotero + Tana and released as `v0.3.0`:
   - **Deleted-annotation recovery.** `syncAnnotations` now does a scoped `ownedBy`

@@ -35,6 +35,7 @@ export async function syncAnnotations(
   item: Zotero.Item,
   referenceNodeId: string,
   stored: Record<string, StoredAnnotation>,
+  workspaceId: string,
 ): Promise<Record<string, StoredAnnotation>> {
   const current = readItemAnnotations(item, annotationTags);
   const result: Record<string, StoredAnnotation> = {};
@@ -47,7 +48,12 @@ export async function syncAnnotations(
   // (mirrors the reference node's `nodeReachable`).
   const liveNodeIds =
     Object.keys(stored).length > 0
-      ? await liveAnnotationNodeIds(client, annotationTags, referenceNodeId)
+      ? await liveAnnotationNodeIds(
+          client,
+          annotationTags,
+          referenceNodeId,
+          workspaceId,
+        )
       : new Set<string>();
 
   // `current` is in reading order, so each annotation's index is its rank. The
@@ -100,6 +106,7 @@ async function liveAnnotationNodeIds(
   client: TanaClient,
   annotationTags: Record<AnnotationKind, ResolvedAnnotationTag>,
   referenceNodeId: string,
+  workspaceId: string,
 ): Promise<Set<string>> {
   // Dedupe in case the user merged annotation tags into one in Tana.
   const tagIds = [
@@ -112,7 +119,7 @@ async function liveAnnotationNodeIds(
         { or: tagIds.map((id) => ({ hasType: id })) },
       ],
     },
-    { limit: 1000 },
+    { limit: 1000, workspaceIds: [workspaceId] },
   );
   return new Set(nodes.map((node) => node.id));
 }

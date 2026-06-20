@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.1
+
+Workspace configuration by ID, and two duplicate-node fixes for title-format
+changes.
+
+- **Configure the workspace by ID, not a live dropdown.** The schema panel now has
+  a Workspace ID text field (the source of truth) plus a Detect button and an
+  on-demand picker, replacing the old dropdown that loaded once at mount (blank if
+  Tana wasn't running then, and never refreshed after a new token). Sync resolves
+  the workspace strictly from the configured ID. Detect requires the account-level
+  Personal Access Token; a per-workspace Input-API token is rejected by the Local
+  API. README clarifies the token requirement.
+- **Scope every sync search to the configured workspace.** `/nodes/search` defaults
+  to whatever workspace is focused in the Tana app, so reachability searches could
+  miss and rebuild duplicate reference/entity/annotation nodes. All sync searches
+  now pass `workspaceIds`.
+- **Extend the index-lag grace to renames.** Changing a node's title format renames
+  it in Tana; a quick re-sync within the search-index lag missed it and rebuilt a
+  duplicate. The reachability grace now anchors to the last create OR rename
+  (`titleSyncedAt`), so a format change renames the existing node in place.
+
 ## 0.3.0
 
 Annotation syncing fixes and richer annotation metadata.

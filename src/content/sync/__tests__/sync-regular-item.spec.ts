@@ -169,6 +169,7 @@ describe('syncRegularItem — create path', () => {
       fields: expectedFieldSignatures,
       contentSig: 'test-content-sig',
       createdAt: expect.any(Number),
+      titleSyncedAt: expect.any(Number),
       annotations: {},
     });
     expect(saveTanaTag).toHaveBeenCalledWith(item);
@@ -240,6 +241,7 @@ describe('syncRegularItem — update path', () => {
       title: 'Vaswani, 2017',
       fields: expectedFieldSignatures,
       contentSig: 'test-content-sig',
+      titleSyncedAt: expect.any(Number),
       annotations: {},
     });
   });
@@ -424,6 +426,7 @@ describe('syncRegularItem — update path', () => {
       fields: expectedFieldSignatures,
       contentSig: 'test-content-sig',
       createdAt: expect.any(Number),
+      titleSyncedAt: expect.any(Number),
       annotations: {},
     });
   });
@@ -486,6 +489,34 @@ describe('syncRegularItem — update path', () => {
     expect(client.update).not.toHaveBeenCalled();
   });
 
+  it('keeps a recently-renamed node search has not reindexed (rename grace, old createdAt)', async () => {
+    const item = createZoteroItemMock();
+    const client = createClientMock();
+    mockedGetTanaSyncData.mockReturnValue({
+      nodeId: 'node1',
+      title: 'Old',
+      fields: {},
+      // Created long ago, but renamed moments ago (e.g. a title-format change):
+      // a search miss is the index lagging the rename, not a deleted node. Without
+      // titleSyncedAt this rebuilt a duplicate.
+      createdAt: Date.now() - 5 * 60_000,
+      titleSyncedAt: Date.now(),
+      annotations: {},
+    });
+    mockSearchByType(client, {
+      [TAG.reference]: [],
+      [TAG.Person]: [{ id: 'person1', name: 'Ashish Vaswani', inTrash: false }],
+    });
+
+    await syncRegularItem(item, makeParams(client));
+
+    // updated in place on the stored node, NOT rebuilt into a duplicate
+    expect(client.update).toHaveBeenCalledWith('node1', {
+      name: 'Vaswani, 2017',
+    });
+    expect(client.import).not.toHaveBeenCalled();
+  });
+
   it('creates a missing entity node and references the new ID', async () => {
     const item = createZoteroItemMock();
     const client = createClientMock();
@@ -508,7 +539,7 @@ describe('syncRegularItem — update path', () => {
 
     expect(client.search).toHaveBeenCalledWith(
       { and: [{ hasType: TAG.Person }, { textContains: 'Ashish Vaswani' }] },
-      { limit: 50 },
+      { limit: 50, workspaceIds: ['ws'] },
     );
     // new entity nodes are created under the workspace Library (entityParentNodeId)
     expect(client.import).toHaveBeenCalledWith(

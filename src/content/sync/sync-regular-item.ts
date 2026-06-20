@@ -59,6 +59,10 @@ export async function syncRegularItem(
   // Stamp the create time on create; preserve it across in-place updates so the
   // index-lag grace stays anchored to when the node was actually created.
   let createdAt: number | undefined;
+  // Stamp the (re)name time on create and on any rename; preserve it otherwise.
+  // The reachability grace keys off this so a rename's index lag isn't mistaken
+  // for a deleted node (which rebuilt a duplicate). See nodeReachable.
+  let titleSyncedAt: number | undefined;
 
   if (existing) {
     const result = await updateNode(
@@ -70,10 +74,15 @@ export async function syncRegularItem(
     );
     ({ nodeId, signatures, referencedFields } = result);
     createdAt = existing.createdAt;
+    const renamed = existing.title !== node.title;
+    titleSyncedAt = renamed
+      ? Date.now()
+      : (existing.titleSyncedAt ?? existing.createdAt);
   } else {
     nodeId = await createNode(client, node, parentNodeId);
     signatures = fieldSignatures(node);
     createdAt = Date.now();
+    titleSyncedAt = createdAt;
   }
 
   const annotations = await syncAnnotations(
@@ -82,6 +91,7 @@ export async function syncRegularItem(
     item,
     nodeId,
     existing?.annotations ?? {},
+    schema.workspaceId,
   );
 
   // Tag the item first so its content signature is computed at steady state:
@@ -97,6 +107,7 @@ export async function syncRegularItem(
     // same helper the modify path uses so a no-op edit produces an equal value.
     contentSig: await contentSignature(item),
     createdAt,
+    titleSyncedAt,
     annotations,
   });
 
@@ -130,12 +141,14 @@ function fieldSignatures(node: TanaReferenceNode): Record<string, string> {
  * for an author-date title, and the cost of a false "unreachable" is just a rebuild.
  */
 /**
- * Tana's search index can lag a few seconds behind a freshly created node, so a
- * reachability search miss right after a create is "not yet indexed", not "gone".
- * Index lag is short and self-correcting; trashing is permanent — so a miss within
- * this window of the node's creation is trusted (keep), and a later miss is real
- * (rebuild). Anchored to each node's own create time, so a long-lived node trashed
- * hours later is well past its window and still rebuilds correctly.
+ * Tana's search index can lag a few seconds behind a freshly created OR renamed
+ * node, so a reachability search miss right after either is "not yet indexed", not
+ * "gone". Index lag is short and self-correcting; trashing is permanent — so a miss
+ * within this window of the node's last (re)name is trusted (keep), and a later
+ * miss is real (rebuild). Anchored to `titleSyncedAt` (the search term is the node
+ * name, so its lag is what matters): a node not renamed in hours is past its window
+ * and still rebuilds correctly, while a title-format change + quick re-sync no
+ * longer search-misses into a duplicate.
  */
 export const INDEX_LAG_GRACE_MS = 30_000;
 
@@ -146,17 +159,17 @@ async function nodeReachable(
 ): Promise<boolean> {
   const results = await client.search(
     { and: [{ hasType: schema.tagId }, { textContains: stored.title }] },
-    { limit: 50 },
+    { limit: 50, workspaceIds: [schema.workspaceId] },
   );
   if (results.some((node) => node.id === stored.nodeId)) return true;
 
-  // Search miss: a node we created moments ago that the index hasn't caught up to,
-  // or one genuinely trashed/orphaned/purged. Tell them apart by age — no readNode
-  // (which can't distinguish a live node from a trashed/orphaned one anyway).
-  return (
-    stored.createdAt !== undefined &&
-    Date.now() - stored.createdAt <= INDEX_LAG_GRACE_MS
-  );
+  // Search miss: a node we (re)named moments ago that the index hasn't caught up
+  // to, or one genuinely trashed/orphaned/purged. Tell them apart by the age of the
+  // last (re)name — no readNode (which can't distinguish a live node from a
+  // trashed/orphaned one anyway). `titleSyncedAt` falls back to `createdAt` for
+  // items synced before it existed.
+  const anchor = stored.titleSyncedAt ?? stored.createdAt;
+  return anchor !== undefined && Date.now() - anchor <= INDEX_LAG_GRACE_MS;
 }
 
 async function createNode(
@@ -236,7 +249,7 @@ async function updateNode(
   // set of nodes this reference owns, and each field's current value node id(s).
   const touch = willWriteOrClear(schema, node, previous);
   const ownedIds = touch
-    ? await ownedNodeIds(client, nodeId)
+    ? await ownedNodeIds(client, nodeId, schema.workspaceId)
     : new Set<string>();
   const valueNodeIds = touch
     ? parseFieldValueNodeIds((await client.readNode(nodeId, 2)).markdown)
@@ -246,7 +259,11 @@ async function updateNode(
   // referenced elsewhere — overwriting/clearing it would trash a node others link to.
   const isProtected = async (fieldName: string): Promise<boolean> => {
     for (const id of valueNodeIds[fieldName] ?? []) {
-      if (ownedIds.has(id) && (await isReferenced(client, id))) return true;
+      if (
+        ownedIds.has(id) &&
+        (await isReferenced(client, id, schema.workspaceId))
+      )
+        return true;
     }
     return false;
   };
@@ -361,8 +378,12 @@ function willWriteOrClear(
 async function ownedNodeIds(
   client: TanaClient,
   nodeId: string,
+  workspaceId: string,
 ): Promise<Set<string>> {
-  const owned = await client.search({ ownedBy: { nodeId } }, { limit: 1000 });
+  const owned = await client.search(
+    { ownedBy: { nodeId } },
+    { limit: 1000, workspaceIds: [workspaceId] },
+  );
   return new Set(owned.map((node) => node.id));
 }
 
@@ -370,8 +391,12 @@ async function ownedNodeIds(
 async function isReferenced(
   client: TanaClient,
   nodeId: string,
+  workspaceId: string,
 ): Promise<boolean> {
-  const refs = await client.search({ linksTo: [nodeId] }, { limit: 1 });
+  const refs = await client.search(
+    { linksTo: [nodeId] },
+    { limit: 1, workspaceIds: [workspaceId] },
+  );
   return refs.length > 0;
 }
 
@@ -435,7 +460,7 @@ async function resolveEntityNodeId(
 
   const results = await client.search(
     { and: [{ hasType: tagId }, { textContains: link.name }] },
-    { limit: 50 },
+    { limit: 50, workspaceIds: [schema.workspaceId] },
   );
   const exact = results.find((n) => !n.inTrash && n.name === link.name);
   if (exact) return exact.id;
