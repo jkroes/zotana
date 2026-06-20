@@ -78,7 +78,8 @@ Source lives under `src/content/`.
 optionSeeds})`: finds the reference tag and the aux tags (Person / Organization /
   highlight / comment / image) **by their configured names** (`config.entityTags`
   / `config.annotationTags`), creating any that are missing (annotation tags get
-  an `Annotation` back-link field), parses `/tags/{id}/schema` markdown for
+  `Annotation` back-link, `Page`, and `Order` fields), parses `/tags/{id}/schema`
+  markdown for
   name→id, creates missing **enabled** fields with their catalog `dataType`, and
   seed-then-trashes the placeholder option needed to create empty Options fields.
   Returns `ResolvedSchema` (incl. `entityTagNames`). Run as a sync preflight, so
@@ -120,7 +121,10 @@ annotationTags, fields:[{key, name, enabled}] }`, persisted as JSON in the
   readers (split out so `content-signature` doesn't import `sync-job`).
 - **`sync/sync-annotations.ts`** — per-annotation upsert into `#highlight` /
   `#comment` / `#image` nodes, each carrying a `zotero://open-pdf` back-link in its
-  `Annotation` field (`sync/annotations.ts` normalizes Zotero annotations to these).
+  `Annotation` field, a `Page` label, and an `Order` rank (`sync/annotations.ts`
+  normalizes Zotero annotations to these). A scoped `ownedBy` reachability search
+  recreates nodes the user deleted in Tana; `Order` is rewritten when an
+  annotation's reading-order rank shifts (see decisions below).
 - **`tana/reference-builder.ts`, `tana/entities.ts`, `tana/tana-paste.ts`** —
   item → reference node (base-field reads, six title formats, live CSL via
   `Zotero.QuickCopy`) → creator bucketing/routing → Tana Paste serialization.
@@ -284,6 +288,23 @@ nodes` command. (Also in README.)
 
 ## Open work
 
+- **v0.3 landed + tagged (2026-06-19, PR #11).** Two annotation-sync changes,
+  live-verified against real Zotero + Tana and released as `v0.3.0`:
+  - **Deleted-annotation recovery.** `syncAnnotations` now does a scoped `ownedBy`
+    - annotation-tag reachability search (one query) and recreates any annotation
+      whose Tana node was trashed/deleted, instead of blindly trusting the stored
+      node id (a trashed node returns 200 on update, so edits used to land silently
+      in the trash and deletions never rebuilt). Mirrors the reference node's
+      `nodeReachable`; uses a per-annotation `createdAt` + the shared
+      `INDEX_LAG_GRACE_MS` to avoid duplicating a just-created node. Also stops
+      re-trashing an already-gone node (which 400s).
+  - **`Page` + `Order` fields** on every annotation tag (`ensureSchema` bootstraps
+    both). `Page` (plain) = Zotero page label, written once at create. `Order`
+    (number) = 1-based reading-order rank, rewritten via `setFieldContent` whenever
+    the rank shifts (stored as `order` on the per-annotation record) so the user
+    can sort by it — Zotana never physically reorders nodes (Tana's move op spawns
+    duplicates). Image placeholder name dropped its `(p. N)` suffix; the page lives
+    in `Page` now.
 - **v0.2 fully live-verified + landed on `main` (2026-06-19, PR #7).** The complete
   live walk against real Zotero + Tana passed: create, in-place update, multi-item
   batch, sync-on-modify no-op skip, Title field, **Test D** (both trashed _and_
