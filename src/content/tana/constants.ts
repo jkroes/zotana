@@ -200,8 +200,8 @@ export const DEFAULT_TAG_NAME = 'zotero';
 
 /** Default names for the entity tags (user-overridable in preferences). */
 export const ENTITY_TAG_NAMES: Record<EntityTag, string> = {
-  Person: 'Person',
-  Organization: 'Organization',
+  Person: 'person',
+  Organization: 'organization',
 };
 
 /** Entity tag keys in display order (the source of truth for iteration). */

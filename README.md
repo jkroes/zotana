@@ -1,9 +1,9 @@
 # Zotana
 
 A [Zotero](https://www.zotero.org/) 7 plugin that live-syncs library items into
-[Tana](https://tana.inc/) as structured `#reference` nodes. Items sync when added
+[Tana](https://tana.inc/) as structured `#zotero` nodes. Items sync when added
 to a watched collection and whenever they're modified, and **update in place** on
-re-sync: the same `#reference` node is updated rather than duplicated, so its
+re-sync: the same `#zotero` node is updated rather than duplicated, so its
 identity and any links into it survive. (Individual field _values_ are rewritten
 as they change — see How it works.)
 
@@ -12,21 +12,25 @@ Notion), with the Notion layer replaced by Tana's **Local API**.
 
 ## How it works
 
-Each Zotero item becomes a `#reference` node in Tana, built on Zotero **base
+Each Zotero item becomes a `#zotero` node in Tana, built on Zotero **base
 fields** so a single supertag covers every item type. Creators are split
-primary-role-aware (Creators / Editors / Contributors) and linked as `#Person` or
-`#Organization` entities (institutions route to `#Organization`). The `#reference` node
+primary-role-aware (Creators / Editors / Contributors) and linked as `#person` or
+`#organization` entities (institutions route to `#organization`). The `#zotero` node
 ID is stored on the item as a "Tana" child attachment so that re-syncs find and update the existing node.
+
+The supertag names shown here (`#zotero`, `#person`, `#organization`, and the
+annotation tags `#highlight` / `#comment` / `#image`) are the **defaults** —
+every one is renameable in the Tana Schema panel.
 
 When a re-sync changes a field, Tana replaces that field's value node (it trashes
 the old one and creates a new one); unchanged fields are left alone. So a link
-pointing at the `#reference` node itself always survives, but a link pointing at a
+pointing at the `#zotero` node itself always survives, but a link pointing at a
 specific field _value_ node would break when that value changes — Zotana detects
 that case, leaves the field untouched, and reports it as a sync warning.
 
 ### Annotations
 
-An item's PDF/EPUB annotations sync as child nodes under its `#reference` node,
+An item's PDF/EPUB annotations sync as child nodes under its `#zotero` node,
 each keyed by its Zotero annotation key so re-syncs update them in place:
 
 - **Highlights / underlines** → `#highlight` — the selected text is the node
@@ -71,7 +75,7 @@ image node loses the id Zotana tracks, so it would recreate the placeholder.
 
 ### What gets overwritten vs. left alone
 
-- **The `#reference` node and annotation nodes keep their identity** across
+- **The `#zotero` node and annotation nodes keep their identity** across
   re-syncs — links pointing _at these nodes_ always survive.
 - **Field values are rewritten only when the source field changes** in Zotero;
   unchanged fields are never touched.
@@ -96,7 +100,7 @@ image node loses the id Zotana tracks, so it would recreate the placeholder.
 ## Install
 
 Download the latest `.xpi` from the
-[Releases page](https://github.com/jkroes/zotana/releases), then in Zotero go to
+[Releases page](https://github.com/jkroes/zotero-tana/releases), then in Zotero go to
 **Tools → Plugins**, click the gear icon → **Install Plugin From File…**, and
 select the `.xpi`. Or build it yourself (see Development).
 
@@ -116,7 +120,7 @@ In Zotero → Settings → Zotana:
    watched collection).
 5. In the **Tana Schema** panel (at the bottom): enter the **Workspace ID** (or
    click **Detect** to fill it from the token); name every
-   supertag Zotana creates (Person / Organization / highlight / comment / image,
+   supertag Zotana creates (person / organization / highlight / comment / image,
    and the reference tag); choose the **reference node title** format; keep or
    rename the fields (blank field names use their defaults) and choose which sync;
    then click **Create / refresh schema in Tana** to create the tags + fields.

@@ -2,16 +2,16 @@
   "name": "zotana",
   "version": "0.3.1",
   "description": "Sync Zotero items into Tana",
-  "homepage": "https://github.com/jkroes/zotana",
+  "homepage": "https://github.com/jkroes/zotero-tana",
   "bugs": {
-    "url": "https://github.com/jkroes/zotana/issues"
+    "url": "https://github.com/jkroes/zotero-tana/issues"
   },
   "author": {
     "name": "Justin Kroes"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jkroes/zotana.git"
+    "url": "https://github.com/jkroes/zotero-tana.git"
   },
   "scripts": {
     "build": "node scripts/build.mts",
@@ -72,7 +72,7 @@
   "xpi": {
     "id": "zotana@jkroes",
     "name": "Zotana",
-    "updateURL": "https://github.com/jkroes/zotana/releases/download/release/updates.json",
+    "updateURL": "https://github.com/jkroes/zotero-tana/releases/download/release/updates.json",
     "zoteroMinVersion": "7.0",
     "zoteroMaxVersion": "9.0.*"
   }
