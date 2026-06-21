@@ -85,17 +85,20 @@ export async function syncRegularItem(
     titleSyncedAt = createdAt;
   }
 
-  const { annotations, containerId: annotationsContainerId } =
-    await syncAnnotations(
-      client,
-      schema.annotationTags,
-      item,
-      nodeId,
-      schema.annotationsFieldId,
-      existing?.annotationsContainerId,
-      existing?.annotations ?? {},
-      schema.workspaceId,
-    );
+  const {
+    annotations,
+    containerId: annotationsContainerId,
+    referencedAnnotations,
+  } = await syncAnnotations(
+    client,
+    schema.annotationTags,
+    item,
+    nodeId,
+    schema.annotationsFieldId,
+    existing?.annotationsContainerId,
+    existing?.annotations ?? {},
+    schema.workspaceId,
+  );
 
   // Tag the item first so its content signature is computed at steady state:
   // `saveTanaTag` adds the `tana` tag, which `getTags()` (and thus the signature)
@@ -115,7 +118,8 @@ export async function syncRegularItem(
     annotations,
   });
 
-  return referencedFields;
+  // Field-level and annotation-level warn-and-skips share one warning channel.
+  return [...referencedFields, ...referencedAnnotations];
 }
 
 /** Signatures for every writable field (the back-link is immutable, excluded). */
@@ -396,7 +400,7 @@ async function ownedNodeIds(
 }
 
 /** Whether any LIVE node links to (references) the given node. */
-async function isReferenced(
+export async function isReferenced(
   client: TanaClient,
   nodeId: string,
   workspaceId: string,

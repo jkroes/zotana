@@ -65,12 +65,18 @@ function createClientMock() {
   };
 }
 
-/** Make the reachability search report the given node IDs as live. */
+/**
+ * Make the reachability search report the given node IDs as live. `linksTo`
+ * queries (the `isReferenced` check) report nothing, so removed annotations trash
+ * unless a test overrides that.
+ */
 function setLiveNodes(
   client: ReturnType<typeof createClientMock>,
   ...ids: string[]
 ) {
-  client.search.mockResolvedValue(ids.map((id) => ({ id })));
+  client.search.mockImplementation((query: { linksTo?: string[] }) =>
+    Promise.resolve(query.linksTo ? [] : ids.map((id) => ({ id }))),
+  );
 }
 
 function run(
@@ -552,5 +558,39 @@ describe('syncAnnotations — delete', () => {
 
     expect(client.trash).not.toHaveBeenCalled();
     expect(result.annotations).not.toHaveProperty('BBB');
+  });
+
+  it('leaves a removed annotation untrashed when another node links to it', async () => {
+    const client = createClientMock();
+    // The node is live (reachability) AND something links to it (isReferenced).
+    client.search.mockImplementation((query: { linksTo?: string[] }) =>
+      Promise.resolve(query.linksTo ? [{ id: 'linker' }] : [{ id: 'gone' }]),
+    );
+    mockedReadItemAnnotations.mockReturnValue([]); // removed from Zotero
+
+    const result = await run(client, {
+      BBB: { nodeId: 'gone', name: 'a quoted highlight', description: '' },
+    });
+
+    // not trashed (the link would break); reported as a warning; still tracked so
+    // a later sync can trash it once the link is gone
+    expect(client.trash).not.toHaveBeenCalled();
+    expect(result.referencedAnnotations).toEqual([
+      'annotation "a quoted highlight"',
+    ]);
+    expect(result.annotations.BBB?.nodeId).toBe('gone');
+  });
+
+  it('reports no referenced annotations when nothing was skipped', async () => {
+    const client = createClientMock();
+    setLiveNodes(client, 'gone');
+    mockedReadItemAnnotations.mockReturnValue([]);
+
+    const result = await run(client, {
+      BBB: { nodeId: 'gone', name: 'old quote', description: '' },
+    });
+
+    expect(client.trash).toHaveBeenCalledWith('gone');
+    expect(result.referencedAnnotations).toEqual([]);
   });
 });

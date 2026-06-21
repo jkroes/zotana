@@ -210,7 +210,14 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   value node, check whether other Tana nodes link to it
   (`search({linksTo:[valueNodeId]})`); if so, leave it and report the field in the
   ProgressWindow ("Synced with warnings"). Relies on `readNode` markdown carrying
-  `<!-- node-id -->` comments (see Open work).
+  `<!-- node-id -->` comments (see Open work). **The same guard protects an
+  annotation removed from Zotero**: before trashing its Tana node,
+  `syncAnnotations` runs `isReferenced` (shared, exported from `sync-regular-item`)
+  and, if another node links to it, leaves it untrashed, warns
+  (`referencedAnnotations`, merged into the same ProgressWindow channel as
+  `referencedFields`), and keeps tracking it so a later sync trashes it once the
+  link is gone. (Annotation _updates_ need no such guard: name/description edits
+  preserve the node id, so links survive.)
 - **Entity nodes land in the workspace Library** (`{workspaceId}_STASH`); Tana
   files inline `[[Name #Person]]` refs there regardless of import parent, so the
   update path matches.

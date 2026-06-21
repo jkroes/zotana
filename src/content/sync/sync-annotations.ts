@@ -32,7 +32,7 @@ import type { ResolvedAnnotationTag } from '../tana/schema';
 import { logger } from '../utils';
 
 import { readItemAnnotations, type AnnotationNode } from './annotations';
-import { INDEX_LAG_GRACE_MS } from './sync-regular-item';
+import { INDEX_LAG_GRACE_MS, isReferenced } from './sync-regular-item';
 
 /** Parse-safe placeholder name used only between import and the literal rename. */
 const PLACEHOLDER_NAME = 'Zotana annotation';
@@ -42,6 +42,12 @@ export type SyncAnnotationsResult = {
   annotations: Record<string, StoredAnnotation>;
   /** Node id of the `Annotations` field tuple, to persist for the next sync. */
   containerId?: string;
+  /**
+   * Labels for annotations removed from Zotero but left untrashed because another
+   * Tana node still links to them — surfaced as sync warnings (same channel as the
+   * reference node's referenced fields).
+   */
+  referencedAnnotations: string[];
 };
 
 export async function syncAnnotations(
@@ -125,15 +131,31 @@ export async function syncAnnotations(
 
   // Trash nodes for annotations removed from Zotero since the last sync. Only
   // trash one we know is still alive — a node the user already deleted is gone
-  // (and re-trashing a trashed node 400s).
+  // (and re-trashing a trashed node 400s). Before trashing, protect a node another
+  // Tana node still links to: trashing it would break that reference, so leave it,
+  // warn, and keep tracking it (`result[key] = record`) so a later sync trashes it
+  // once the link is gone — mirroring the reference node's warn-and-skip.
+  const referencedAnnotations: string[] = [];
   for (const [key, record] of Object.entries(stored)) {
-    if (!result[key] && liveNodeIds.has(record.nodeId)) {
-      logger.debug('Trashing Tana node for removed annotation', key);
-      await client.trash(record.nodeId);
+    if (result[key] || !liveNodeIds.has(record.nodeId)) continue;
+    if (await isReferenced(client, record.nodeId, workspaceId)) {
+      logger.debug('Removed annotation is referenced; leaving it', key);
+      referencedAnnotations.push(annotationWarningLabel(record));
+      result[key] = record;
+      continue;
     }
+    logger.debug('Trashing Tana node for removed annotation', key);
+    await client.trash(record.nodeId);
   }
 
-  return { annotations: result, containerId };
+  return { annotations: result, containerId, referencedAnnotations };
+}
+
+/** A short, readable label for a removed-but-referenced annotation, for warnings. */
+function annotationWarningLabel(record: StoredAnnotation): string {
+  const text = record.name.trim() || 'annotation';
+  const short = text.length > 40 ? `${text.slice(0, 40)}…` : text;
+  return `annotation "${short}"`;
 }
 
 /** Whether the stored `Annotations` tuple is still a live child of the reference. */
