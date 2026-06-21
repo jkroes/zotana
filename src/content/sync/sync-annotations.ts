@@ -3,7 +3,8 @@
  * quote/note nodes already under its #reference node in Tana.
  *
  * Each annotation is keyed by its stable Zotero key. On every sync we:
- *   - create a node for a key we've never synced (under the reference node),
+ *   - create a node for a key we've never synced (nested under the reference
+ *     node's `Annotations` field — see the container handling below),
  *   - recreate the node for a key whose Tana node is no longer reachable (the
  *     user trashed/deleted it — see the reachability check below),
  *   - update name/description in place when the text or comment changed,
@@ -14,6 +15,13 @@
  * imported Tana Paste, because highlight text can contain Paste-significant
  * characters (`#`, `::`, `[[`). The Paste import only carries a placeholder name
  * plus the supertag; the real text is written afterwards.
+ *
+ * Annotations are grouped under one `Annotations` field on the reference node.
+ * That field is a single tuple node; importing `Field::` again would spawn a
+ * *second* `Annotations` field (verified against the live API), so new annotations
+ * must be imported *under the existing tuple node* to land in the same field. We
+ * resolve that tuple's id lazily (creating the field with the first annotation,
+ * re-resolving if the user deleted it) and persist it as `annotationsContainerId`.
  */
 
 import type { StoredAnnotation } from '../data/item-data';
@@ -29,14 +37,23 @@ import { INDEX_LAG_GRACE_MS } from './sync-regular-item';
 /** Parse-safe placeholder name used only between import and the literal rename. */
 const PLACEHOLDER_NAME = 'Zotana annotation';
 
+export type SyncAnnotationsResult = {
+  /** Zotero annotation key -> its synced Tana node state. */
+  annotations: Record<string, StoredAnnotation>;
+  /** Node id of the `Annotations` field tuple, to persist for the next sync. */
+  containerId?: string;
+};
+
 export async function syncAnnotations(
   client: TanaClient,
   annotationTags: Record<AnnotationKind, ResolvedAnnotationTag>,
   item: Zotero.Item,
   referenceNodeId: string,
+  annotationsFieldId: string,
+  storedContainerId: string | undefined,
   stored: Record<string, StoredAnnotation>,
   workspaceId: string,
-): Promise<Record<string, StoredAnnotation>> {
+): Promise<SyncAnnotationsResult> {
   const current = readItemAnnotations(item, annotationTags);
   const result: Record<string, StoredAnnotation> = {};
 
@@ -56,6 +73,37 @@ export async function syncAnnotations(
         )
       : new Set<string>();
 
+  // The `Annotations` field tuple, resolved lazily: validated against Tana on
+  // first use (the user may have deleted the field) and created with the first
+  // annotation if absent. Each create refreshes it so subsequent creates append
+  // to the same field.
+  let containerId = storedContainerId;
+  let containerChecked = false;
+  const createOne = async (
+    annotation: AnnotationNode,
+    order: number,
+  ): Promise<StoredAnnotation> => {
+    if (!containerChecked) {
+      containerChecked = true;
+      if (
+        containerId &&
+        !(await containerIsLive(client, referenceNodeId, containerId))
+      ) {
+        containerId = undefined;
+      }
+    }
+    const created = await createAnnotationNode(
+      client,
+      referenceNodeId,
+      annotationsFieldId,
+      containerId,
+      annotation,
+      order,
+    );
+    containerId = created.containerId;
+    return created.stored;
+  };
+
   // `current` is in reading order, so each annotation's index is its rank. The
   // rank is written to the Order field and rewritten whenever it shifts.
   for (const [index, annotation] of current.entries()) {
@@ -67,12 +115,12 @@ export async function syncAnnotations(
     result[annotation.key] = reachable
       ? await updateAnnotationNode(
           client,
-          referenceNodeId,
           previous,
           annotation,
           order,
+          createOne,
         )
-      : await createAnnotationNode(client, referenceNodeId, annotation, order);
+      : await createOne(annotation, order);
   }
 
   // Trash nodes for annotations removed from Zotero since the last sync. Only
@@ -85,7 +133,42 @@ export async function syncAnnotations(
     }
   }
 
-  return result;
+  return { annotations: result, containerId };
+}
+
+/** Whether the stored `Annotations` tuple is still a live child of the reference. */
+async function containerIsLive(
+  client: TanaClient,
+  referenceNodeId: string,
+  containerId: string,
+): Promise<boolean> {
+  const { children } = await client.getChildren(referenceNodeId, {
+    limit: 1000,
+  });
+  return children.some((child) => child.id === containerId && !child.inTrash);
+}
+
+/**
+ * The node id of the `Annotations` field tuple just created by an import: it's the
+ * reference node's direct child that this import created (the annotation node and
+ * its value nodes sit deeper, so they aren't direct children). Returns undefined
+ * if it can't be located — the caller degrades to leaving the container unset.
+ */
+async function resolveCreatedFieldTuple(
+  client: TanaClient,
+  referenceNodeId: string,
+  createdNodeIds: Set<string>,
+): Promise<string | undefined> {
+  const { children } = await client.getChildren(referenceNodeId, {
+    limit: 1000,
+  });
+  const tuple = children.find(
+    (child) =>
+      child.docType === 'tuple' &&
+      createdNodeIds.has(child.id) &&
+      !child.inTrash,
+  );
+  return tuple?.id;
 }
 
 /**
@@ -98,6 +181,12 @@ export async function syncAnnotations(
  * ~1000 annotations per item rather than ~500. (An item with more annotations
  * than that would search-miss the overflow and recreate duplicates — rare, and
  * the same class of cap as entity resolution's 50-hit limit.)
+ *
+ * **`/nodes/search` returns trashed nodes too** (with `inTrash: true`, filed under
+ * "Deleted Nodes" — verified live), so we must drop them: a trashed annotation the
+ * user deleted in Tana would otherwise count as reachable and get updated *in
+ * place inside the trash* instead of being recreated. (`resolveEntityNodeId`
+ * filters `inTrash` for the same reason.)
  *
  * `ownedBy.recursive` is omitted: the Local API 400s on the string `"true"` a GET
  * query carries, and its default is already `true` (see `ownedNodeIds`).
@@ -121,7 +210,7 @@ async function liveAnnotationNodeIds(
     },
     { limit: 1000, workspaceIds: [workspaceId] },
   );
-  return new Set(nodes.map((node) => node.id));
+  return new Set(nodes.filter((node) => !node.inTrash).map((node) => node.id));
 }
 
 /**
@@ -144,26 +233,77 @@ function isReachable(
   );
 }
 
+/**
+ * Create an annotation node and return it plus the `Annotations` field tuple it
+ * lives under.
+ *
+ * - With a known `containerId` (the field already exists): import the annotation
+ *   *under that tuple node*, so it appends to the same field.
+ * - Without one: import `Field::` on the reference node to create the field with
+ *   this annotation as its first value, then resolve the new tuple's id so the
+ *   caller can append the rest there.
+ *
+ * The back-link goes under the tag's Annotation Link field as plain text (like
+ * every URL field — the user converts URLs to nodes in Tana); the page label goes
+ * in the Page field. Both are stable per annotation, so they're only written here.
+ */
 async function createAnnotationNode(
   client: TanaClient,
   referenceNodeId: string,
+  annotationsFieldId: string,
+  containerId: string | undefined,
   annotation: AnnotationNode,
   order: number,
-): Promise<StoredAnnotation> {
-  // Carry the back-link in the paste under the tag's Annotation field, as plain
-  // text (like every URL field — the user converts URLs to nodes in Tana). The
-  // page label goes in the Page field. Both are stable per annotation, so
-  // they're only ever written here.
-  const lines = [
-    '%%tana%%',
-    `- ${PLACEHOLDER_NAME} #[[^${annotation.tagId}]]`,
-    `  - [[^${annotation.annotationFieldId}]]:: ${annotation.link}`,
-  ];
-  if (annotation.page) {
-    lines.push(`  - [[^${annotation.pageFieldId}]]:: ${annotation.page}`);
+): Promise<{ stored: StoredAnnotation; containerId: string | undefined }> {
+  // The annotation subtree, indented to sit under whatever parent line precedes.
+  const annotationLines = (indent: string): string[] => {
+    const lines = [
+      `${indent}- ${PLACEHOLDER_NAME} #[[^${annotation.tagId}]]`,
+      `${indent}  - [[^${annotation.annotationFieldId}]]:: ${annotation.link}`,
+    ];
+    if (annotation.page) {
+      lines.push(
+        `${indent}  - [[^${annotation.pageFieldId}]]:: ${annotation.page}`,
+      );
+    }
+    return lines;
+  };
+
+  // Append under the existing field tuple, or create the field on the reference.
+  const [parentId, paste] = containerId
+    ? [containerId, ['%%tana%%', ...annotationLines('')].join('\n')]
+    : [
+        referenceNodeId,
+        [
+          '%%tana%%',
+          `- [[^${annotationsFieldId}]]::`,
+          ...annotationLines('  '),
+        ].join('\n'),
+      ];
+
+  let createdNodes;
+  try {
+    ({ createdNodes } = await client.import(parentId, paste));
+  } catch (error) {
+    // A stored container the user deleted in Tana → its tuple node is gone.
+    // Recreate the field on the reference node and retry once.
+    if (
+      containerId &&
+      error instanceof TanaApiError &&
+      (error.status === 404 || error.status === 400)
+    ) {
+      logger.debug('Annotations field tuple gone; recreating it', containerId);
+      return createAnnotationNode(
+        client,
+        referenceNodeId,
+        annotationsFieldId,
+        undefined,
+        annotation,
+        order,
+      );
+    }
+    throw error;
   }
-  const paste = lines.join('\n');
-  const { createdNodes } = await client.import(referenceNodeId, paste);
 
   // The annotation node is the placeholder-named one (the field-value node the
   // paste also creates carries the URL as its name, so don't match the first name).
@@ -189,16 +329,31 @@ async function createAnnotationNode(
     String(order),
   );
 
-  return toStored(created.id, annotation, undefined, order);
+  // When we created the field, resolve its tuple id so later creates append there.
+  const resolvedContainerId = containerId
+    ? containerId
+    : await resolveCreatedFieldTuple(
+        client,
+        referenceNodeId,
+        new Set(createdNodes.map((node) => node.id)),
+      );
+
+  return {
+    stored: toStored(created.id, annotation, undefined, order),
+    containerId: resolvedContainerId,
+  };
 }
 
 /** Update a still-reachable annotation node in place, writing only what changed. */
 async function updateAnnotationNode(
   client: TanaClient,
-  referenceNodeId: string,
   previous: StoredAnnotation,
   annotation: AnnotationNode,
   order: number,
+  recreate: (
+    annotation: AnnotationNode,
+    order: number,
+  ) => Promise<StoredAnnotation>,
 ): Promise<StoredAnnotation> {
   const fields: { name?: string; description?: string | null } = {};
   if (previous.name !== annotation.name) fields.name = annotation.name;
@@ -232,9 +387,9 @@ async function updateAnnotationNode(
     if (error instanceof TanaApiError && error.status === 404) {
       // Backstop: the reachability search said live but the node was purged
       // between then and this write (or its `createdAt` grace let a missing node
-      // through). Recreate it, stamping a fresh createdAt.
+      // through). Recreate it (under the resolved field tuple), fresh createdAt.
       logger.debug('Recreating hard-deleted annotation node', annotation.key);
-      return createAnnotationNode(client, referenceNodeId, annotation, order);
+      return recreate(annotation, order);
     }
     throw error;
   }

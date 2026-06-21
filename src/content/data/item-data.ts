@@ -71,6 +71,15 @@ export type TanaSyncData = {
    * items synced before this existed; falls back to `createdAt`.
    */
   titleSyncedAt?: number;
+  /**
+   * Node id of the reference node's `Annotations` field tuple — the container all
+   * annotation nodes are nested under. Stored so a later sync can append new
+   * annotations to the *same* field (importing `Field::` again would spawn a
+   * duplicate field). Set when the field is first created; absent for items synced
+   * before this existed (their annotations stay as bare children) and re-resolved
+   * if the user deletes the field in Tana.
+   */
+  annotationsContainerId?: string;
   /** Zotero annotation key -> its Tana node state. */
   annotations: Record<string, StoredAnnotation>;
 };
@@ -112,6 +121,10 @@ function readSyncData(attachment: Zotero.Item): TanaSyncData | undefined {
     titleSyncedAt:
       typeof parsed.titleSyncedAt === 'number'
         ? parsed.titleSyncedAt
+        : undefined,
+    annotationsContainerId:
+      typeof parsed.annotationsContainerId === 'string'
+        ? parsed.annotationsContainerId
         : undefined,
     annotations: parseAnnotations(parsed.annotations),
   };

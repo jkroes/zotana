@@ -63,7 +63,8 @@ Source lives under `src/content/`.
 - **`tana/client.ts`** — thin REST client for the Tana Local API (injected
   `fetch` + Bearer token). `health`, `import`, `setFieldContent` (accepts `null`
   to clear), `setFieldOption`, `setTags`, `trash`, `readNode`, `search`,
-  `update` (flat `{name?, description?}`), and schema ops `listWorkspaces`,
+  `update` (flat `{name?, description?}`), `getChildren` (a node's direct children
+  — used to locate the `Annotations` field tuple), and schema ops `listWorkspaces`,
   `listWorkspaceTags`, `createTag`, `addField`, `getTagSchema`.
 - **`tana/constants.ts`** — the field `CATALOG` (per field: `key`,
   `defaultName`, `dataType`, `multiValue`, `transientSeed`, …). **No hardcoded
@@ -78,12 +79,14 @@ Source lives under `src/content/`.
 optionSeeds})`: finds the reference tag and the aux tags (Person / Organization /
   highlight / comment / image) **by their configured names** (`config.entityTags`
   / `config.annotationTags`), creating any that are missing (annotation tags get
-  `Annotation` back-link, `Page`, and `Order` fields), parses `/tags/{id}/schema`
-  markdown for
-  name→id, creates missing **enabled** fields with their catalog `dataType`, and
-  seed-then-trashes the placeholder option needed to create empty Options fields.
-  Returns `ResolvedSchema` (incl. `entityTagNames`). Run as a sync preflight, so
-  the first sync auto-bootstraps.
+  `Annotation Link` back-link, `Page`, and `Order` fields; the reference tag gets
+  an always-created plain `Annotations` container field —
+  `REFERENCE_ANNOTATIONS_FIELD_NAME`, not a CATALOG field), parses
+  `/tags/{id}/schema` markdown for name→id, creates missing **enabled** fields
+  with their catalog `dataType`, and seed-then-trashes the placeholder option
+  needed to create empty Options fields. Returns `ResolvedSchema` (incl.
+  `entityTagNames` and `annotationsFieldId`). Run as a sync preflight, so the
+  first sync auto-bootstraps.
 - **`prefs/schema-config.ts`** — `SchemaConfig { tagName, entityTags,
 annotationTags, fields:[{key, name, enabled}] }`, persisted as JSON in the
   `schemaConfig` pref. `mergeSchemaConfig` reconciles a stored config against the
@@ -120,11 +123,14 @@ annotationTags, fields:[{key, name, enabled}] }`, persisted as JSON in the
 - **`sync/sync-config.ts`** — shared `getCitationFormat` / `getTitleFormat` pref
   readers (split out so `content-signature` doesn't import `sync-job`).
 - **`sync/sync-annotations.ts`** — per-annotation upsert into `#highlight` /
-  `#comment` / `#image` nodes, each carrying a `zotero://open-pdf` back-link in its
-  `Annotation` field, a `Page` label, and an `Order` rank (`sync/annotations.ts`
-  normalizes Zotero annotations to these). A scoped `ownedBy` reachability search
-  recreates nodes the user deleted in Tana; `Order` is rewritten when an
-  annotation's reading-order rank shifts (see decisions below).
+  `#comment` / `#image` nodes, **nested under the reference node's `Annotations`
+  field** (`schema.annotationsFieldId`), each carrying a `zotero://open-pdf`
+  back-link in its `Annotation Link` field, a `Page` label, and an `Order` rank
+  (`sync/annotations.ts` normalizes Zotero annotations to these). A scoped
+  `ownedBy` reachability search recreates nodes the user deleted in Tana — nodes
+  nested under the field stay recursively owned by the reference node, so the
+  search is unaffected; `Order` is rewritten when an annotation's reading-order
+  rank shifts (see decisions below).
 - **`tana/reference-builder.ts`, `tana/entities.ts`, `tana/tana-paste.ts`** —
   item → reference node (base-field reads, six title formats, live CSL via
   `Zotero.QuickCopy`) → creator bucketing/routing → Tana Paste serialization.
@@ -176,7 +182,15 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   purged), so a bare read can't tell a usable node from a dead one.
   `sync-regular-item` searches by tag + stored title and checks the stored nodeId
   is among the hits: reachable → update in place; unreachable (trashed / orphaned
-  / purged all collapse here) → rebuild.
+  / purged all collapse here) → rebuild. **`/nodes/search` itself returns trashed
+  nodes** (with `inTrash: true`, filed under "Deleted Nodes" — live-verified), so
+  every reachability/usefulness check must drop `inTrash` hits, or a node the user
+  trashed in Tana counts as "reachable" and gets updated _in place inside the
+  trash_ instead of rebuilt. This guard lives in `nodeReachable`,
+  `liveAnnotationNodeIds` (annotations), `resolveEntityNodeId` (entity reuse), and
+  `isReferenced` (a trashed linker must not protect a field). The only search whose
+  raw hits are used without the filter is `ownedNodeIds` (it's intersected with
+  live value-node ids from a `readNode`, so trashed entries can't false-match).
 - **Index-lag grace on reachability.** Tana's search index lags a few seconds
   behind a freshly created **or renamed** node, so a re-sync within that window
   (e.g. drop-to-collection auto-sync then a manual sync; or a title-format change
@@ -200,21 +214,46 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
 - **Entity nodes land in the workspace Library** (`{workspaceId}_STASH`); Tana
   files inline `[[Name #Person]]` refs there regardless of import parent, so the
   update path matches.
-- **One `Annotation` field per annotation tag, resolved by name.** Each of
-  `#highlight` / `#comment` / `#image` gets its **own** `Annotation` back-link
-  field, because the Local API's `POST /tags/{tagId}/fields` only ever _creates_
-  a field (name + dataType) — there's no way to attach an existing field id to a
-  second tag, and `ensureSchema` resolves each tag's field independently from
-  _that tag's_ `/tags/{id}/schema` markdown. So three tags ⇒ three `Annotation`
-  fields by design. A user **can safely merge them into one** in Tana: resolution
-  is purely by name (`ANNOTATION_FIELD_NAME = 'Annotation'`), so as long as all
-  three tags still carry a field literally named `Annotation` (still a URL field)
-  after the merge, sync keeps writing back-links to the single merged field. If
-  the merge drops the field from any tag or renames it, the next sync's
-  `ensureSchema` recreates a fresh `Annotation` on the tag(s) missing it by that
-  name — reintroducing duplicates. Existing annotation back-links are unaffected
+- **One `Annotation Link` field per annotation tag, resolved by name.** Each of
+  `#highlight` / `#comment` / `#image` gets its **own** `Annotation Link`
+  back-link field, because the Local API's `POST /tags/{tagId}/fields` only ever
+  _creates_ a field (name + dataType) — there's no way to attach an existing field
+  id to a second tag, and `ensureSchema` resolves each tag's field independently
+  from _that tag's_ `/tags/{id}/schema` markdown. So three tags ⇒ three
+  `Annotation Link` fields by design. A user **can safely merge them into one** in
+  Tana: resolution is purely by name (`ANNOTATION_FIELD_NAME = 'Annotation Link'`),
+  so as long as all three tags still carry a field literally named `Annotation
+Link` (still a URL field) after the merge, sync keeps writing back-links to the
+  single merged field. If the merge drops the field from any tag or renames it,
+  the next sync's `ensureSchema` recreates a fresh `Annotation Link` on the tag(s)
+  missing it by that name — reintroducing duplicates. Existing annotation
+  back-links are unaffected
   either way: the back-link is written only at node creation, never on update
   (`sync-annotations.ts` updates touch only name/description).
+- **Annotations nest under a reference-tag `Annotations` container field**, not as
+  bare children of the reference node. The field is a plain field
+  (`REFERENCE_ANNOTATIONS_FIELD_NAME`), always created by `ensureSchema` (it's
+  structural, so it's not in the CATALOG and has no per-field sync toggle). **The
+  field is one tuple node, and importing `[[^annotationsFieldId]]::` again creates
+  a _second_ `Annotations` field** (live-verified — Tana does NOT merge repeated
+  field imports by attribute id). So new annotations must be imported _under the
+  existing field tuple node_, not via `Field::`. `sync-annotations` resolves that
+  tuple id lazily and persists it as `annotationsContainerId` (`TanaSyncData`):
+  the first create imports `Field::` on the reference node to make the field, then
+  finds the new tuple via `getChildren(ref)` ∩ that import's `createdNodes` (the
+  tuple is the only created node that's a _direct_ child of the reference — the
+  annotation and its value nodes sit deeper); later creates import under the stored
+  tuple so they append to the one field. A stored tuple the user deleted in Tana is
+  detected (`getChildren` no longer lists it) and the field is recreated. The
+  literal text/comment is still written afterward via `update` (highlight text
+  carries Paste-significant chars). **Reachability is intentionally unchanged**:
+  nodes nested under the field — or under a further sub-node the user adds _within_
+  it — stay recursively owned by the reference node, so the `ownedBy`-scoped search
+  still finds them (live-verified). (Moving annotations _out_ from under the
+  reference node would break that search — but the field keeps them inside it.) The
+  update path never re-parents, so annotations synced before this change stay as
+  bare children (still owned by the reference node ⇒ still reachable, no
+  duplicates); only newly-created/rebuilt ones land under the field.
 - **Partial-date granularity** — emit `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` from
   Zotero's multipart SQL date; no season→month padding.
 - **Sync-on-modify = global debounce + content-signature no-op skip.**
@@ -284,6 +323,11 @@ debounce + the modify-path no-op skip) is Zotana's; see decisions below.
   `client.search` call in the sync path passes `workspaceIds: [schema.workspaceId]`.
   Entity/reference/annotation nodes all live in the configured workspace, so
   scoping is always correct.
+- **Search returns trashed nodes** (`inTrash: true`, breadcrumb under "Deleted
+  Nodes" — live-verified). A `hasType`/`ownedBy`/`linksTo` query includes nodes the
+  user trashed, so any "is this node still usable?" check must filter `inTrash`
+  (see the Deleted-node policy decision). Hard-purged and orphaned-ghost nodes do
+  drop out of search; only trashed-but-not-purged ones come back flagged.
 
 ## Known limitations
 

@@ -53,6 +53,21 @@ export interface ReadResult {
   description?: unknown;
 }
 
+export interface NodeChild {
+  id: string;
+  name: string;
+  /** `tuple` for a field assertion, `content` for a regular node, etc. */
+  docType: string;
+  childCount: number;
+  inTrash: boolean;
+}
+
+export interface ChildrenResult {
+  children: NodeChild[];
+  total: number;
+  hasMore: boolean;
+}
+
 export type FieldMode = 'replace' | 'append';
 
 export interface Workspace {
@@ -218,6 +233,23 @@ export class TanaClient {
   public readNode(nodeId: string, maxDepth = 1): Promise<ReadResult> {
     return this.request('GET', `/nodes/${enc(nodeId)}`, undefined, {
       maxDepth,
+    });
+  }
+
+  /**
+   * A node's direct children (one page). Used to locate the `Annotations` field
+   * tuple under a reference node: it's the direct child whose id appears in a just
+   * imported field's `createdNodes` (annotation/value nodes sit deeper, not as
+   * direct children). `limit`/`offset` are numeric, so they coerce fine in the GET
+   * query (unlike the booleans `/nodes/search` rejects).
+   */
+  public getChildren(
+    nodeId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<ChildrenResult> {
+    return this.request('GET', `/nodes/${enc(nodeId)}/children`, undefined, {
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+      ...(opts.offset !== undefined ? { offset: opts.offset } : {}),
     });
   }
 

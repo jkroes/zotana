@@ -141,7 +141,7 @@ export const CATALOG: CatalogEntry[] = [
   { key: 'fullCitation', defaultName: 'Full Citation', dataType: 'plain' },
   { key: 'inTextCitation', defaultName: 'In-Text Citation', dataType: 'plain' },
   { key: 'issue', defaultName: 'Issue', dataType: 'plain' },
-  { key: 'item', defaultName: 'Item', dataType: 'url' },
+  { key: 'item', defaultName: 'Item Link', dataType: 'url' },
   {
     key: 'itemType',
     defaultName: 'Item Type',
@@ -236,7 +236,7 @@ export const ANNOTATION_TAG_KEYS = [
  * renders clickable; stable per annotation, so never rewritten (see the URL-render
  * limitation in tana-paste).
  */
-export const ANNOTATION_FIELD_NAME = 'Annotation';
+export const ANNOTATION_FIELD_NAME = 'Annotation Link';
 
 /**
  * Plain-text field created on every annotation tag, holding the annotation's
@@ -252,6 +252,17 @@ export const ANNOTATION_PAGE_FIELD_NAME = 'Page';
  * user can sort by it to recover reading order regardless of the node tree order.
  */
 export const ANNOTATION_ORDER_FIELD_NAME = 'Order';
+
+/**
+ * Plain field created on the reference tag, holding the item's annotation nodes
+ * as nested children (each `#highlight` / `#comment` / `#image`). Annotations are
+ * imported under this field instead of as bare children of the reference node, so
+ * they're grouped in one place. They remain recursively owned by the reference
+ * node, so the `ownedBy`-scoped reachability search is unaffected. Structural (a
+ * container, not item content), so it lives here rather than in the field CATALOG
+ * and is always created by `ensureSchema`.
+ */
+export const REFERENCE_ANNOTATIONS_FIELD_NAME = 'Annotations';
 
 /** Tag applied to synced Zotero items so they can be filtered/found. */
 export const TANA_TAG_NAME = 'tana';

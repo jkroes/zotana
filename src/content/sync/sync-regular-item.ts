@@ -85,14 +85,17 @@ export async function syncRegularItem(
     titleSyncedAt = createdAt;
   }
 
-  const annotations = await syncAnnotations(
-    client,
-    schema.annotationTags,
-    item,
-    nodeId,
-    existing?.annotations ?? {},
-    schema.workspaceId,
-  );
+  const { annotations, containerId: annotationsContainerId } =
+    await syncAnnotations(
+      client,
+      schema.annotationTags,
+      item,
+      nodeId,
+      schema.annotationsFieldId,
+      existing?.annotationsContainerId,
+      existing?.annotations ?? {},
+      schema.workspaceId,
+    );
 
   // Tag the item first so its content signature is computed at steady state:
   // `saveTanaTag` adds the `tana` tag, which `getTags()` (and thus the signature)
@@ -108,6 +111,7 @@ export async function syncRegularItem(
     contentSig: await contentSignature(item),
     createdAt,
     titleSyncedAt,
+    annotationsContainerId,
     annotations,
   });
 
@@ -161,7 +165,11 @@ async function nodeReachable(
     { and: [{ hasType: schema.tagId }, { textContains: stored.title }] },
     { limit: 50, workspaceIds: [schema.workspaceId] },
   );
-  if (results.some((node) => node.id === stored.nodeId)) return true;
+  // `/nodes/search` returns trashed nodes too (with `inTrash: true`), so a node
+  // the user trashed in Tana must NOT count as reachable — otherwise we'd update
+  // it in place inside the trash instead of rebuilding it.
+  if (results.some((node) => node.id === stored.nodeId && !node.inTrash))
+    return true;
 
   // Search miss: a node we (re)named moments ago that the index hasn't caught up
   // to, or one genuinely trashed/orphaned/purged. Tell them apart by the age of the
@@ -387,17 +395,20 @@ async function ownedNodeIds(
   return new Set(owned.map((node) => node.id));
 }
 
-/** Whether any node links to (references) the given node. */
+/** Whether any LIVE node links to (references) the given node. */
 async function isReferenced(
   client: TanaClient,
   nodeId: string,
   workspaceId: string,
 ): Promise<boolean> {
+  // `/nodes/search` includes trashed nodes; a trashed linker isn't a real
+  // reference, so fetch a page and require at least one live one (don't `limit: 1`,
+  // or a single trashed linker would falsely protect the field).
   const refs = await client.search(
     { linksTo: [nodeId] },
-    { limit: 1, workspaceIds: [workspaceId] },
+    { limit: 50, workspaceIds: [workspaceId] },
   );
-  return refs.length > 0;
+  return refs.some((ref) => !ref.inTrash);
 }
 
 /**

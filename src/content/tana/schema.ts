@@ -16,6 +16,7 @@ import {
   ANNOTATION_ORDER_FIELD_NAME,
   ANNOTATION_PAGE_FIELD_NAME,
   CATALOG_BY_KEY,
+  REFERENCE_ANNOTATIONS_FIELD_NAME,
   effectiveFieldName,
   type AnnotationKind,
   type CatalogEntry,
@@ -52,6 +53,11 @@ export type ResolvedSchema = {
   entityTagNames: Record<EntityTag, string>;
   /** Annotation supertags (highlight/comment/image) + each one's link field id. */
   annotationTags: Record<AnnotationKind, ResolvedAnnotationTag>;
+  /**
+   * Attribute id of the reference tag's `Annotations` field, the container under
+   * which annotation nodes are imported (see `REFERENCE_ANNOTATIONS_FIELD_NAME`).
+   */
+  annotationsFieldId: string;
   /** Enabled fields only: catalog key -> resolved name + attribute id. */
   fields: Partial<Record<FieldKey, ResolvedField>>;
 };
@@ -148,6 +154,18 @@ export async function ensureSchema(
     for (const seedId of seedIds) await client.trash(seedId);
   }
 
+  // The reference tag's `Annotations` container field — annotation nodes are
+  // imported under it (see `syncAnnotations`). Structural, not a CATALOG field,
+  // so it's always ensured here regardless of the per-field sync toggles.
+  let annotationsFieldId = existingFields.get(REFERENCE_ANNOTATIONS_FIELD_NAME);
+  if (!annotationsFieldId) {
+    const created = await client.addField(tagId, {
+      name: REFERENCE_ANNOTATIONS_FIELD_NAME,
+      dataType: 'plain',
+    });
+    annotationsFieldId = created.fieldId;
+  }
+
   // Annotation tags (highlight/comment/image), each with an `Annotation` URL
   // field for the PDF back-link and a `Page` field for the page label.
   // Independent of the reference fields above, so resolved last. Each field is
@@ -201,6 +219,7 @@ export async function ensureSchema(
     entityTagIds,
     entityTagNames: { ...config.entityTags },
     annotationTags,
+    annotationsFieldId,
     fields,
   };
 }

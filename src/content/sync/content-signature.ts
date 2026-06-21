@@ -123,6 +123,7 @@ function localSchema(config: SchemaConfig): ResolvedSchema {
       comment: emptyAnnotationTag,
       image: emptyAnnotationTag,
     },
+    annotationsFieldId: '',
     fields,
   };
 }

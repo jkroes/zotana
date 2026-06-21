@@ -92,12 +92,18 @@ describe('ensureSchema — bootstrap (nothing exists)', () => {
     // annotation tags + their Annotation back-link, Page, and Order fields
     expect(schema.annotationTags.highlight).toEqual({
       tagId: 'tag-highlight',
-      annotationFieldId: 'field-Annotation',
+      annotationFieldId: 'field-Annotation Link',
       pageFieldId: 'field-Page',
       orderFieldId: 'field-Order',
     });
     expect(schema.annotationTags.comment.tagId).toBe('tag-comment');
     expect(schema.annotationTags.image.tagId).toBe('tag-image');
+    // the reference tag's Annotations container field is created
+    expect(schema.annotationsFieldId).toBe('field-Annotations');
+    expect(client.addField).toHaveBeenCalledWith('tag-zotero', {
+      name: 'Annotations',
+      dataType: 'plain',
+    });
 
     // enabled fields resolved; disabled field absent
     expect(schema.fields.creators).toEqual({
@@ -133,12 +139,12 @@ describe('ensureSchema — bootstrap (nothing exists)', () => {
     expect(byName('Abstract')).toMatchObject({ dataType: 'plain' });
     expect(byName('Abstract')?.options).toBeUndefined();
 
-    // each annotation tag got a URL Annotation field
-    expect(byName('Annotation')).toMatchObject({ dataType: 'url' });
+    // each annotation tag got a URL Annotation Link field
+    expect(byName('Annotation Link')).toMatchObject({ dataType: 'url' });
     expect(
       addCalls.filter(
         (call: unknown[]) =>
-          (call[1] as { name: string }).name === 'Annotation',
+          (call[1] as { name: string }).name === 'Annotation Link',
       ),
     ).toHaveLength(3);
 
@@ -244,9 +250,10 @@ describe('ensureSchema — resolve (everything exists)', () => {
               '- **Creators** (id:field-Creators):: Options',
               '- **Item Type** (id:field-ItemType):: Options',
               '- **Abstract** (id:field-Abstract):: Content',
+              '- **Annotations** (id:field-Annotations):: Content',
             ].join('\n')
           : [
-              '- **Annotation** (id:field-Annotation):: URL',
+              '- **Annotation Link** (id:field-Annotation Link):: URL',
               '- **Page** (id:field-Page):: Content',
               '- **Order** (id:field-Order):: Number',
             ].join('\n'),

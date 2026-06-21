@@ -33,7 +33,7 @@ const TAG = {
 };
 
 const FIELD = {
-  item: { name: 'Item', id: 'fid-item' },
+  item: { name: 'Item Link', id: 'fid-item' },
   doi: { name: 'DOI', id: 'fid-doi' },
   date: { name: 'Date', id: 'fid-date' },
   itemType: { name: 'Item Type', id: 'fid-itemType' },
@@ -67,6 +67,7 @@ const schema: ResolvedSchema = {
       orderFieldId: 'oid-im',
     },
   },
+  annotationsFieldId: 'fid-annotations',
   fields: {
     item: FIELD.item,
     doi: FIELD.doi,
@@ -429,6 +430,33 @@ describe('syncRegularItem — update path', () => {
       titleSyncedAt: expect.any(Number),
       annotations: {},
     });
+  });
+
+  it('rebuilds when search returns the stored node but flagged inTrash', async () => {
+    const item = createZoteroItemMock();
+    const client = createClientMock();
+    mockedGetTanaSyncData.mockReturnValue({
+      nodeId: 'node1',
+      title: 'Vaswani, 2017',
+      fields: {},
+      annotations: {},
+    });
+    // The search DOES return trashed nodes (inTrash: true); a node the user
+    // trashed must not count as reachable, or we'd update it inside the trash.
+    mockSearchByType(client, {
+      [TAG.reference]: [{ id: 'node1', name: 'Vaswani, 2017', inTrash: true }],
+    });
+    client.import.mockResolvedValue({
+      createdNodes: [{ id: 'fresh-node', name: 'Vaswani, 2017' }],
+    });
+
+    await syncRegularItem(item, makeParams(client));
+
+    expect(client.import).toHaveBeenCalledWith(
+      'parent',
+      expect.stringContaining('#reference'),
+    );
+    expect(client.update).not.toHaveBeenCalled();
   });
 
   it('keeps a just-created node that search has not indexed yet (within grace)', async () => {

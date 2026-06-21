@@ -40,14 +40,28 @@ const mockedReadItemAnnotations = vi.mocked(readItemAnnotations);
 
 function createClientMock() {
   return {
+    // A field-creating import returns the tuple node plus the annotation node;
+    // find-by-placeholder-name picks the annotation ('new-node').
     import: vi.fn().mockResolvedValue({
-      createdNodes: [{ id: 'new-node', name: 'Zotana annotation' }],
+      createdNodes: [
+        { id: 'tuple-node', name: '' },
+        { id: 'new-node', name: 'Zotana annotation' },
+      ],
     }),
     update: vi.fn().mockResolvedValue(undefined),
     setFieldContent: vi.fn().mockResolvedValue(undefined),
     trash: vi.fn().mockResolvedValue(undefined),
     // The reachability search; tests set the live node IDs they expect.
     search: vi.fn().mockResolvedValue([]),
+    // Used to resolve/validate the Annotations field tuple. Default: the tuple
+    // the import created is a live direct child of the reference node.
+    getChildren: vi.fn().mockResolvedValue({
+      children: [
+        { id: 'tuple-node', name: '', docType: 'tuple', inTrash: false },
+      ],
+      total: 1,
+      hasMore: false,
+    }),
   };
 }
 
@@ -62,12 +76,15 @@ function setLiveNodes(
 function run(
   client: ReturnType<typeof createClientMock>,
   stored: Record<string, StoredAnnotation>,
+  storedContainerId?: string,
 ) {
   return syncAnnotations(
     client as unknown as TanaClient,
     annotationTags,
     createZoteroItemMock({}),
     'ref-node',
+    'annotations-field',
+    storedContainerId,
     stored,
     'ws-id',
   );
@@ -98,6 +115,8 @@ describe('syncAnnotations — create', () => {
 
     expect(client.import).toHaveBeenCalledWith('ref-node', expect.any(String));
     const paste = client.import.mock.calls[0]?.[1] as string;
+    // annotation is nested under the reference node's Annotations field
+    expect(paste).toContain('[[^annotations-field]]::');
     expect(paste).toContain('#[[^highlight-tag]]');
     // back-link written as plain text under the Annotation field
     expect(paste).toContain('[[^hl-field]]:: ' + highlight.link);
@@ -113,13 +132,15 @@ describe('syncAnnotations — create', () => {
       'hl-order',
       '1',
     );
-    expect(result.AAA).toMatchObject({
+    expect(result.annotations.AAA).toMatchObject({
       nodeId: 'new-node',
       name: 'A highlighted sentence',
       description: 'with a comment',
       order: 1,
     });
-    expect(result.AAA?.createdAt).toEqual(expect.any(Number));
+    expect(result.annotations.AAA?.createdAt).toEqual(expect.any(Number));
+    // the new Annotations field tuple is captured for the next sync
+    expect(result.containerId).toBe('tuple-node');
   });
 
   it('does not run the reachability search when nothing was stored', async () => {
@@ -157,6 +178,69 @@ describe('syncAnnotations — create', () => {
   });
 });
 
+describe('syncAnnotations — Annotations field container', () => {
+  it('appends a new annotation under the existing field tuple, not a new field', async () => {
+    const client = createClientMock();
+    mockedReadItemAnnotations.mockReturnValue([highlight]);
+
+    // A container is already known and reported live by getChildren.
+    const result = await run(client, {}, 'tuple-node');
+
+    // imported under the tuple node, and the paste does NOT re-create the field
+    expect(client.import).toHaveBeenCalledWith(
+      'tuple-node',
+      expect.any(String),
+    );
+    const paste = client.import.mock.calls[0]?.[1] as string;
+    expect(paste).not.toContain('[[^annotations-field]]::');
+    expect(paste).toContain('#[[^highlight-tag]]');
+    expect(result.containerId).toBe('tuple-node');
+  });
+
+  it('recreates the field when the stored tuple was deleted in Tana', async () => {
+    const client = createClientMock();
+    mockedReadItemAnnotations.mockReturnValue([highlight]);
+    // The stored tuple is no longer a live child → fall back to creating it.
+    client.getChildren.mockResolvedValueOnce({
+      children: [],
+      total: 0,
+      hasMore: false,
+    });
+
+    const result = await run(client, {}, 'old-tuple');
+
+    expect(client.import).toHaveBeenCalledWith(
+      'ref-node',
+      expect.stringContaining('[[^annotations-field]]::'),
+    );
+    expect(result.containerId).toBe('tuple-node');
+  });
+
+  it('preserves the stored container when only updates happen (no lookups)', async () => {
+    const client = createClientMock();
+    setLiveNodes(client, 'existing');
+    mockedReadItemAnnotations.mockReturnValue([highlight]);
+
+    const result = await run(
+      client,
+      {
+        AAA: {
+          nodeId: 'existing',
+          name: highlight.name,
+          description: highlight.description,
+          order: 1,
+        },
+      },
+      'tuple-node',
+    );
+
+    // pure-update sync: never touches the field container
+    expect(client.getChildren).not.toHaveBeenCalled();
+    expect(client.import).not.toHaveBeenCalled();
+    expect(result.containerId).toBe('tuple-node');
+  });
+});
+
 describe('syncAnnotations — update in place (still reachable)', () => {
   it('updates only the fields that changed', async () => {
     const client = createClientMock();
@@ -175,7 +259,7 @@ describe('syncAnnotations — update in place (still reachable)', () => {
     expect(client.update).toHaveBeenCalledWith('existing', {
       name: 'A highlighted sentence',
     });
-    expect(result.AAA?.nodeId).toBe('existing');
+    expect(result.annotations.AAA?.nodeId).toBe('existing');
   });
 
   it('clears the description when a comment was removed', async () => {
@@ -228,7 +312,7 @@ describe('syncAnnotations — update in place (still reachable)', () => {
       },
     });
 
-    expect(result.AAA?.createdAt).toBe(111);
+    expect(result.annotations.AAA?.createdAt).toBe(111);
   });
 
   it('backfills a missing createdAt on an in-place update', async () => {
@@ -240,7 +324,7 @@ describe('syncAnnotations — update in place (still reachable)', () => {
       AAA: { nodeId: 'existing', name: 'old text', description: '' },
     });
 
-    expect(result.AAA?.createdAt).toEqual(expect.any(Number));
+    expect(result.annotations.AAA?.createdAt).toEqual(expect.any(Number));
   });
 
   it('recreates the node when an update 404s (purged after the reachability check)', async () => {
@@ -259,7 +343,7 @@ describe('syncAnnotations — update in place (still reachable)', () => {
       'ref-node',
       expect.stringContaining('#[[^highlight-tag]]'),
     );
-    expect(result.AAA?.nodeId).toBe('new-node');
+    expect(result.annotations.AAA?.nodeId).toBe('new-node');
   });
 });
 
@@ -308,8 +392,8 @@ describe('syncAnnotations — Order field', () => {
       'hl-order',
       '2',
     );
-    expect(result.AAA?.order).toBe(1);
-    expect(result.BBB?.order).toBe(2);
+    expect(result.annotations.AAA?.order).toBe(1);
+    expect(result.annotations.BBB?.order).toBe(2);
   });
 });
 
@@ -330,7 +414,7 @@ describe('syncAnnotations — unreachable (deleted in Tana)', () => {
     });
 
     expect(client.import).toHaveBeenCalledWith('ref-node', expect.any(String));
-    expect(result.AAA?.nodeId).toBe('new-node');
+    expect(result.annotations.AAA?.nodeId).toBe('new-node');
   });
 
   it('recreates a trashed node whose annotation text changed', async () => {
@@ -348,7 +432,27 @@ describe('syncAnnotations — unreachable (deleted in Tana)', () => {
     });
 
     expect(client.import).toHaveBeenCalled();
-    expect(result.AAA?.nodeId).toBe('new-node');
+    expect(result.annotations.AAA?.nodeId).toBe('new-node');
+  });
+
+  it('recreates a node the search returns but flagged inTrash (deleted in Tana)', async () => {
+    const client = createClientMock();
+    // The reachability search DOES return trashed nodes (inTrash: true); they must
+    // not count as live, or we'd update the annotation in place inside the trash.
+    client.search.mockResolvedValue([{ id: 'trashed', inTrash: true }]);
+    mockedReadItemAnnotations.mockReturnValue([highlight]);
+
+    const result = await run(client, {
+      AAA: {
+        nodeId: 'trashed',
+        name: highlight.name,
+        description: highlight.description,
+        createdAt: 1,
+      },
+    });
+
+    expect(client.import).toHaveBeenCalled();
+    expect(result.annotations.AAA?.nodeId).toBe('new-node');
   });
 
   it('recreates a node with no createdAt that the search no longer finds', async () => {
@@ -365,7 +469,7 @@ describe('syncAnnotations — unreachable (deleted in Tana)', () => {
     });
 
     expect(client.import).toHaveBeenCalled();
-    expect(result.AAA?.nodeId).toBe('new-node');
+    expect(result.annotations.AAA?.nodeId).toBe('new-node');
   });
 });
 
@@ -392,7 +496,7 @@ describe('syncAnnotations — index-lag grace', () => {
     });
 
     expect(client.import).not.toHaveBeenCalled();
-    expect(result.AAA?.nodeId).toBe('fresh');
+    expect(result.annotations.AAA?.nodeId).toBe('fresh');
   });
 
   it('recreates once a missing node is older than the grace window', async () => {
@@ -412,7 +516,7 @@ describe('syncAnnotations — index-lag grace', () => {
     });
 
     expect(client.import).toHaveBeenCalled();
-    expect(result.AAA?.nodeId).toBe('new-node');
+    expect(result.annotations.AAA?.nodeId).toBe('new-node');
   });
 });
 
@@ -433,8 +537,8 @@ describe('syncAnnotations — delete', () => {
 
     expect(client.trash).toHaveBeenCalledWith('gone');
     expect(client.trash).toHaveBeenCalledTimes(1);
-    expect(result).not.toHaveProperty('BBB');
-    expect(result.AAA?.nodeId).toBe('keep');
+    expect(result.annotations).not.toHaveProperty('BBB');
+    expect(result.annotations.AAA?.nodeId).toBe('keep');
   });
 
   it('does not trash an already-deleted node (avoids re-trash 400)', async () => {
@@ -447,6 +551,6 @@ describe('syncAnnotations — delete', () => {
     });
 
     expect(client.trash).not.toHaveBeenCalled();
-    expect(result).not.toHaveProperty('BBB');
+    expect(result.annotations).not.toHaveProperty('BBB');
   });
 });
