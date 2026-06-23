@@ -204,15 +204,20 @@ sync-on-modify services are inherited from Notero.
 
 ### Releasing
 
-Bump `version` in `package.json`, commit, then push a matching `v*` tag:
+Bump `version` in `package.json`, commit, and push to `main`. Wait for the
+**Build** workflow to go green, then tag that commit and push the tag — only a
+tag push triggers `Release`, so never tag before `main` is green:
 
 ```sh
+git push                      # triggers Build
+gh run watch ...               # wait for green — see docs/RELEASING.md
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
 The [`Release` workflow](.github/workflows/release.yml) builds the `.xpi`,
 attaches it to a GitHub Release for that tag, and publishes the auto-update
-manifest under the `release` tag.
+manifest under the `release` tag. See `docs/RELEASING.md` for the full
+rationale and recovery steps if a tag ends up on a bad commit.
 
 ## Credits
 
