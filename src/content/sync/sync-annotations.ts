@@ -27,11 +27,7 @@
 import type { StoredAnnotation } from '../data/item-data';
 import { LocalizableError } from '../errors';
 import { TanaApiError, type TanaClient } from '../tana/client';
-import {
-  ANNOTATION_TAG_KEYS,
-  REFERENCE_ANNOTATIONS_FIELD_NAME,
-  type AnnotationKind,
-} from '../tana/constants';
+import { ANNOTATION_TAG_KEYS, type AnnotationKind } from '../tana/constants';
 import type { ResolvedAnnotationTag } from '../tana/schema';
 import { logger } from '../utils';
 
@@ -98,6 +94,7 @@ export async function syncAnnotations(
       containerId = await resolveAnnotationsContainer(
         client,
         referenceNodeId,
+        annotationsFieldId,
         containerId,
       );
     }
@@ -164,12 +161,14 @@ function annotationWarningLabel(record: StoredAnnotation): string {
 /**
  * Resolve the `Annotations` field tuple under the reference node. Checks the
  * stored id first; if it's gone (trashed, deleted, never stored), falls back to
- * finding any live tuple named "Annotations" — this prevents creating a
- * duplicate field when the stored container id is lost.
+ * finding the tuple whose first child is the Annotations attribute definition —
+ * field tuples have empty names, so matching by attribute id is the only
+ * reliable way to identify them.
  */
 async function resolveAnnotationsContainer(
   client: TanaClient,
   referenceNodeId: string,
+  annotationsFieldId: string,
   storedContainerId: string | undefined,
 ): Promise<string | undefined> {
   const { children } = await client.getChildren(referenceNodeId, {
@@ -183,13 +182,19 @@ async function resolveAnnotationsContainer(
     return storedContainerId;
   }
 
-  const existing = children.find(
-    (child) =>
-      child.docType === 'tuple' &&
-      child.name === REFERENCE_ANNOTATIONS_FIELD_NAME &&
-      !child.inTrash,
+  const tuples = children.filter(
+    (child) => child.docType === 'tuple' && !child.inTrash,
   );
-  return existing?.id;
+  for (const tuple of tuples) {
+    const { children: tupleChildren } = await client.getChildren(tuple.id, {
+      limit: 1,
+    });
+    if (tupleChildren.some((c) => c.id === annotationsFieldId)) {
+      return tuple.id;
+    }
+  }
+
+  return undefined;
 }
 
 /**

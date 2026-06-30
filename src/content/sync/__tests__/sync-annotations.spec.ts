@@ -226,14 +226,29 @@ describe('syncAnnotations — Annotations field container', () => {
   it('reuses an existing Annotations tuple when the stored container ID is lost', async () => {
     const client = createClientMock();
     mockedReadItemAnnotations.mockReturnValue([highlight]);
-    // Stored container is gone, but the reference node still has an Annotations
-    // tuple (name-based fallback).
+    // First getChildren: reference node's children — the tuple with empty name
+    // (field tuples always have empty names in the getChildren response).
     client.getChildren.mockResolvedValueOnce({
       children: [
         {
           id: 'existing-tuple',
-          name: 'Annotations',
+          name: '',
           docType: 'tuple',
+          childCount: 2,
+          inTrash: false,
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    });
+    // Second getChildren: the tuple's children — first child is the Annotations
+    // attribute definition (matching the annotationsFieldId passed to syncAnnotations).
+    client.getChildren.mockResolvedValueOnce({
+      children: [
+        {
+          id: 'annotations-field',
+          name: 'Annotations',
+          docType: 'attrDef',
           childCount: 0,
           inTrash: false,
         },
