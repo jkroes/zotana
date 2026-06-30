@@ -206,7 +206,8 @@ describe('syncAnnotations — Annotations field container', () => {
   it('recreates the field when the stored tuple was deleted in Tana', async () => {
     const client = createClientMock();
     mockedReadItemAnnotations.mockReturnValue([highlight]);
-    // The stored tuple is no longer a live child → fall back to creating it.
+    // The stored tuple is no longer a live child and no other Annotations tuple
+    // exists → fall back to creating it.
     client.getChildren.mockResolvedValueOnce({
       children: [],
       total: 0,
@@ -220,6 +221,37 @@ describe('syncAnnotations — Annotations field container', () => {
       expect.stringContaining('[[^annotations-field]]::'),
     );
     expect(result.containerId).toBe('tuple-node');
+  });
+
+  it('reuses an existing Annotations tuple when the stored container ID is lost', async () => {
+    const client = createClientMock();
+    mockedReadItemAnnotations.mockReturnValue([highlight]);
+    // Stored container is gone, but the reference node still has an Annotations
+    // tuple (name-based fallback).
+    client.getChildren.mockResolvedValueOnce({
+      children: [
+        {
+          id: 'existing-tuple',
+          name: 'Annotations',
+          docType: 'tuple',
+          childCount: 0,
+          inTrash: false,
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    });
+
+    const result = await run(client, {}, 'old-tuple');
+
+    // imported under the found tuple, not via a new Field::
+    expect(client.import).toHaveBeenCalledWith(
+      'existing-tuple',
+      expect.any(String),
+    );
+    const paste = client.import.mock.calls[0]?.[1] as string;
+    expect(paste).not.toContain('[[^annotations-field]]::');
+    expect(result.containerId).toBe('existing-tuple');
   });
 
   it('preserves the stored container when only updates happen (no lookups)', async () => {

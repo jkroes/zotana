@@ -27,7 +27,11 @@
 import type { StoredAnnotation } from '../data/item-data';
 import { LocalizableError } from '../errors';
 import { TanaApiError, type TanaClient } from '../tana/client';
-import { ANNOTATION_TAG_KEYS, type AnnotationKind } from '../tana/constants';
+import {
+  ANNOTATION_TAG_KEYS,
+  REFERENCE_ANNOTATIONS_FIELD_NAME,
+  type AnnotationKind,
+} from '../tana/constants';
 import type { ResolvedAnnotationTag } from '../tana/schema';
 import { logger } from '../utils';
 
@@ -91,12 +95,11 @@ export async function syncAnnotations(
   ): Promise<StoredAnnotation> => {
     if (!containerChecked) {
       containerChecked = true;
-      if (
-        containerId &&
-        !(await containerIsLive(client, referenceNodeId, containerId))
-      ) {
-        containerId = undefined;
-      }
+      containerId = await resolveAnnotationsContainer(
+        client,
+        referenceNodeId,
+        containerId,
+      );
     }
     const created = await createAnnotationNode(
       client,
@@ -158,16 +161,35 @@ function annotationWarningLabel(record: StoredAnnotation): string {
   return `annotation "${short}"`;
 }
 
-/** Whether the stored `Annotations` tuple is still a live child of the reference. */
-async function containerIsLive(
+/**
+ * Resolve the `Annotations` field tuple under the reference node. Checks the
+ * stored id first; if it's gone (trashed, deleted, never stored), falls back to
+ * finding any live tuple named "Annotations" — this prevents creating a
+ * duplicate field when the stored container id is lost.
+ */
+async function resolveAnnotationsContainer(
   client: TanaClient,
   referenceNodeId: string,
-  containerId: string,
-): Promise<boolean> {
+  storedContainerId: string | undefined,
+): Promise<string | undefined> {
   const { children } = await client.getChildren(referenceNodeId, {
     limit: 1000,
   });
-  return children.some((child) => child.id === containerId && !child.inTrash);
+
+  if (
+    storedContainerId &&
+    children.some((child) => child.id === storedContainerId && !child.inTrash)
+  ) {
+    return storedContainerId;
+  }
+
+  const existing = children.find(
+    (child) =>
+      child.docType === 'tuple' &&
+      child.name === REFERENCE_ANNOTATIONS_FIELD_NAME &&
+      !child.inTrash,
+  );
+  return existing?.id;
 }
 
 /**
